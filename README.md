@@ -46,15 +46,18 @@ Each video makes **3 Gemini API calls**:
 
 ### The math
 
-Each video uses **3 calls**: 1 Flash (script) + 2 Flash-Lite (trends + fact-check). The RPD of **20** is the binding constraint:
+Each video uses **3 calls**: 1 Flash (script) + 2 Flash-Lite (trends + fact-check). The bot generates **2 per run × 3 runs = 6 per day** as a buffer — the fact-check gate typically holds 1–2 per day (rejected or unverifiable claims), so you reliably land **~4 published videos/day**.
 
-| Scenario | Flash used | Flash-Lite used | RPD remaining |
+| Scenario | Flash RPD used | Flash-Lite RPD used | Free headroom left |
 |---|---|---|---|
-| 3 videos/day, no manual tests | 3 / 20 | 6 / 20 | Flash 17 · Lite 14 |
-| 3 videos/day + 1 manual test run | 4 / 20 | 8 / 20 | Flash 16 · Lite 12 |
-| **Free ceiling** | ~20 videos/day | ~10 videos/day | 0 |
+| **Default: 3 runs × 2 clips** | **6 / 20 (30%)** | **9 / 20 (45%)** | Flash 14 · Lite 11 |
+| 3 runs × 1 clip (conservative) | 3 / 20 (15%) | 6 / 20 (30%) | Flash 17 · Lite 14 |
+| + 1 manual test run on top | +1 Flash +2 Lite | +1 Flash +2 Lite | deducted from above |
+| **Free ceiling** | ~20 clips/day | ~10 clips/day | 0 |
 
-**Practical free limit: ~10 videos/day** (Flash-Lite runs out first at 2 calls per video). The default 3/day schedule fits easily — but **manual test runs on the same day eat into that budget**, so run tests sparingly.
+**The default 2-per-run setup uses 30–45% of the free RPD**, leaving enough headroom for an occasional manual test run. Avoid running multiple manual tests on the same day as your scheduled runs.
+
+With billing (Tier 1): Flash gets ~10,000 RPD, Flash-Lite gets **Unlimited**.
 
 With billing (Tier 1): Flash gets ~10,000 RPD, Flash-Lite gets **Unlimited**.
 
@@ -78,62 +81,108 @@ Token usage is the only charge — everything else stays $0:
 
 ## Customize for your use case
 
-Everything is controlled by your `.env` file. You do not need to touch any code.
+The bot is fully configurable — niche, tone, length, voices, posting frequency, platforms. **No code changes required.** Everything is driven by environment variables.
 
-### Business / brand channel
-Promote your products, services, or industry. The bot will source relevant news and angle it toward your niche.
+There are two ways to set them:
+- **Local / manual use:** edit your `.env` file
+- **GitHub Actions (cloud schedule):** set [GitHub Variables](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables) under *Settings → Secrets and variables → Actions → Variables tab* — the workflow picks them up automatically with no file editing
 
+---
+
+### All customizable parameters
+
+| Variable | What it controls | Default | Notes |
+|---|---|---|---|
+| `CONTENT_NICHE` | Topics Gemini searches for trends. Be specific — the more concrete, the better the stories. | AI / space / UFOs | Comma-separated list |
+| `CONTENT_TONE` | The narrator's personality. Shapes every word of the script. | Plain-spoken explainer | Describe it like you'd describe a TV presenter |
+| `CLIP_SECONDS` | Target video length in seconds. | `25` | 15–30s is the Shorts retention sweet spot |
+| `TTS_VOICES` | Pool of Microsoft neural voices rotated per video. | 6 English voices | Run `python -m socialbot.cli voices` to list all 200+ options |
+| `YOUTUBE_PRIVACY` | `public`, `unlisted`, or `private` | `private` | Set to `private` while testing, `public` when live |
+| `SPECULATIVE_KEYWORDS` | Topics allowed to post on a `needs_review` fact-check result (inherently unverifiable claims). | ufo,alien,paranormal,... | Comma-separated, no spaces around commas |
+| `POSTS_PER_RUN` | How many clips to generate per scheduled run. | `2` | 3 runs × 2 = 6 generated, ~4 published after filtering |
+
+**Posting schedule** is set in `.github/workflows/auto.yml`. The three `cron:` lines are in UTC — change them to match your timezone. For example, to post at 9am, 2pm, and 7pm US Eastern (UTC-4 in summer):
+```yaml
+- cron: "0 13 * * *"   # 9am ET
+- cron: "0 18 * * *"   # 2pm ET
+- cron: "0 23 * * *"   # 7pm ET
+```
+[UTC timezone converter →](https://www.timeanddate.com/worldclock/converter.html)
+
+---
+
+### Preset configurations
+
+Copy-paste any of these into your `.env` (or as GitHub Variables) to change the channel type instantly.
+
+#### Business / brand promotion
+The bot sources industry news and angles it toward your brand. Great for product launches, service businesses, or thought leadership.
 ```env
 CONTENT_NICHE=sustainable fashion brand, eco-friendly clothing, ethical manufacturing trends
-CONTENT_TONE=confident and brand-forward, speaks to eco-conscious consumers, warm but informative
+CONTENT_TONE=confident brand voice, speaks to eco-conscious consumers, warm but informative — not salesy
 CLIP_SECONDS=20
 ```
 
-### Local news / community channel
+#### Local news / community
 ```env
-CONTENT_NICHE=local government, city council, community events, regional business news
+CONTENT_NICHE=local government, city planning, community events, regional business, neighborhood stories
 CONTENT_TONE=neutral local news reporter, factual, community-focused, no sensationalism
 CLIP_SECONDS=30
 ```
 
-### Finance / investing
+#### Finance / investing
 ```env
-CONTENT_NICHE=stock market, crypto, personal finance, economic news, Federal Reserve
-CONTENT_TONE=calm and analytical, data-driven, speaks to retail investors, avoids hype
+CONTENT_NICHE=stock market, cryptocurrency, personal finance tips, economic policy, Federal Reserve, earnings reports
+CONTENT_TONE=calm and analytical, data-driven, speaks to retail investors, avoids hype and predictions
 CLIP_SECONDS=25
 ```
 
-### Fitness / health
+#### Fitness / health
 ```env
-CONTENT_NICHE=fitness research, nutrition science, sports medicine, workout trends
-CONTENT_TONE=motivating but evidence-based, plain-spoken, practical — no bro-science
+CONTENT_NICHE=fitness research, nutrition science, sports medicine, workout trends, mental health
+CONTENT_TONE=motivating but evidence-based, plain-spoken, practical — no bro-science or miracle claims
+CLIP_SECONDS=20
+SPECULATIVE_KEYWORDS=miracle,cure,secret,detox
+```
+
+#### Gaming / esports
+```env
+CONTENT_NICHE=video game releases, esports tournaments, gaming industry news, indie games, game dev
+CONTENT_TONE=enthusiastic and casual, speaks to gamers, fast-paced — current gaming slang is fine
 CLIP_SECONDS=20
 ```
 
-### Gaming / esports
+#### True crime / mysteries
 ```env
-CONTENT_NICHE=video game releases, esports tournaments, gaming industry news, game reviews
-CONTENT_TONE=enthusiastic and casual, speaks to gamers, fast-paced, current slang is fine
-CLIP_SECONDS=20
+CONTENT_NICHE=unsolved crimes, cold cases, criminal investigations, forensic science breakthroughs
+CONTENT_TONE=serious and measured, factual, respectful of victims — no sensationalism or speculation
+CLIP_SECONDS=30
+SPECULATIVE_KEYWORDS=suspect,alleged,theory,conspiracy
 ```
 
-### Tech / AI (the default)
+#### Tech / AI (the default)
 ```env
 CONTENT_NICHE=AI and emerging technology, space and astronomy, UFOs/UAPs and the search for extraterrestrial life
 CONTENT_TONE=clear, punchy, plain-spoken explainer; smart and factual but neutral — no hype, no jokes
 CLIP_SECONDS=25
+SPECULATIVE_KEYWORDS=ufo,ufos,uap,uaps,alien,aliens,extraterrestrial,flying saucer,close encounter,abduction,roswell,paranormal,cryptid
 ```
 
-### Key parameters
+---
 
-| Variable | What it controls | Example |
-|---|---|---|
-| `CONTENT_NICHE` | What topics Gemini searches for. Be specific — the more concrete, the better the stories. | `"electric vehicles, Tesla, EV charging infrastructure"` |
-| `CONTENT_TONE` | The narrator's personality and speaking style. Shapes every word of the script. | `"upbeat fitness coach, motivating, science-backed"` |
-| `CLIP_SECONDS` | Target video length. 15–30s is the sweet spot for Shorts retention. | `20` |
-| `TTS_VOICES` | Comma-separated pool of Microsoft neural voices. The bot rotates through them. Run `python -m socialbot.cli voices` to list all options. | `"en-US-AndrewMultilingualNeural,en-GB-RyanNeural"` |
-| `YOUTUBE_PRIVACY` | `public`, `unlisted`, or `private`. Set to `private` while testing. | `public` |
-| `SPECULATIVE_KEYWORDS` | Topics that are allowed to post on a `needs_review` fact-check (inherently unverifiable claims). | `"ufo,alien,paranormal"` |
+### Voices
+
+The bot ships with 6 English voices that rotate per video. To customize, run:
+```bash
+python -m socialbot.cli voices
+```
+This lists all 200+ available Microsoft neural voices by language and name. Add any you like to `TTS_VOICES` as a comma-separated list. For a non-English channel, use voices matching your language:
+```env
+# Spanish channel
+TTS_VOICES=es-MX-JorgeNeural,es-ES-AlvaroNeural,es-US-AlonsoNeural
+CONTENT_NICHE=noticias de tecnología, inteligencia artificial, ciencia espacial
+CONTENT_TONE=presentador de noticias claro y directo, sin sensacionalismo
+```
 
 ---
 
@@ -232,16 +281,30 @@ The bot runs headless on GitHub's servers — **no server, no always-on machine*
 
 ### Setup
 1. Push this repo to a **private** GitHub repository.
-2. Add these **Secrets** under *Settings → Secrets and variables → Actions*:
+2. Go to *Settings → Secrets and variables → Actions* and add:
 
+   **Secrets tab** (sensitive values — encrypted):
    | Secret | Value |
    |---|---|
    | `GEMINI_API_KEY` | Your Gemini API key |
-   | `PEXELS_API_KEY` | Your Pexels key |
+   | `PEXELS_API_KEY` | Your Pexels key (optional) |
    | `YOUTUBE_TOKEN` | Contents of `secrets/youtube_token.json` after running `youtube-auth` locally |
 
-3. The workflow (`.github/workflows/auto.yml`) fires at **13:00, 18:00, and 23:00 UTC** by default. Edit the `cron` lines to match your timezone.
-4. Trigger a run manually from the **Actions** tab → **auto-post** → **Run workflow** to test.
+   **Variables tab** (non-sensitive config — edit any time without re-deploying):
+   | Variable | Value | Default if not set |
+   |---|---|---|
+   | `CONTENT_NICHE` | Your topics (see presets above) | AI / space / UFOs |
+   | `CONTENT_TONE` | Narrator style | Plain-spoken explainer |
+   | `CLIP_SECONDS` | Video length in seconds | `25` |
+   | `TTS_VOICES` | Comma-separated voice pool | 6 English voices |
+   | `YOUTUBE_PRIVACY` | `public` / `unlisted` / `private` | `public` |
+   | `SPECULATIVE_KEYWORDS` | Topics allowed to post unverified | ufo,alien,paranormal,... |
+   | `POSTS_PER_RUN` | Clips generated per scheduled run | `2` |
+
+   > Variables let you change your niche, tone, or posting volume directly in the GitHub UI — no file editing or re-deploying required.
+
+3. The workflow fires at **13:00, 18:00, and 23:00 UTC** by default. To change the schedule, edit the three `cron:` lines in `.github/workflows/auto.yml`.
+4. Test with a manual trigger: **Actions → auto-post → Run workflow**.
 
 ### Pausing
 Disable the workflow in the Actions tab. A local `data/PAUSED` file pauses local runs only — it has no effect on the cloud job.
