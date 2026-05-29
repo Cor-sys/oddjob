@@ -30,6 +30,17 @@ def _run(args: list[str], cwd: Path | None = None) -> None:
         raise RuntimeError(f"ffmpeg failed:\n{proc.stderr.strip()}")
 
 
+def trim_audio(src: Path, dst: Path, seconds: float, *, fade: float = 1.0) -> Path:
+    """Copy `src` audio to `dst`, trimmed to `seconds` with a short fade-out so a
+    song/clip ends cleanly instead of cutting off mid-note. Used by promo mode."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    st = max(0.0, seconds - fade)
+    _run(["-i", str(src.resolve()), "-t", f"{seconds:.2f}",
+          "-af", f"afade=t=out:st={st:.2f}:d={fade:.2f}",
+          "-c:a", "aac", "-b:a", "192k", str(dst.resolve())])
+    return dst
+
+
 def _make_gradient_bg(out: Path, duration: float, work: Path) -> None:
     src = (
         f"gradients=s={W}x{H}:c0=0x141e30:c1=0x2d1b4e:c2=0x0b3a53:"
