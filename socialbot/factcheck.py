@@ -9,7 +9,11 @@ from .script import Script
 _SYSTEM = (
     "You are a strict fact-checker. You verify each factual claim against current "
     "web sources. You are conservative: if a claim cannot be confirmed, you flag it. "
-    "You never approve content containing unverifiable or false claims."
+    "You never approve content containing unverifiable or false claims. "
+    "CRITICAL: you ALWAYS reply with ONLY the requested JSON object — never refuse "
+    "in prose, never add commentary. If claims are unsupported, express that via "
+    "the verdict ('needs_review' or 'rejected') and the claim statuses, not by "
+    "declining to answer."
 )
 
 # verdicts
@@ -67,7 +71,17 @@ Return ONLY a JSON object:
   "claims": [{{"claim": "...", "status": "...", "note": "..."}}]
 }}"""
 
-    data, sources = grounded_json(prompt, system=_SYSTEM)
+    try:
+        data, sources = grounded_json(prompt, system=_SYSTEM)
+    except Exception as e:
+        # Model refused / returned prose / transient error — hold for safety
+        # rather than crashing the topic. needs_review means "do not auto-publish".
+        print(f"     [factcheck] inconclusive ({type(e).__name__}); holding as needs_review")
+        return FactCheck(
+            verdict=NEEDS_REVIEW,
+            summary="Fact-check did not return a usable result; held (not auto-published).",
+            sources=[],
+        )
     if not isinstance(data, dict):
         data = {}
 
