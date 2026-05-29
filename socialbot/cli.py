@@ -293,7 +293,21 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _force_utf8_stdout() -> None:
+    """Windows consoles default to cp1252, which can't encode the Unicode the bot
+    prints (box-drawing rules, en-dashes in the tone string, etc.) and raises
+    UnicodeEncodeError. Switch stdout/stderr to UTF-8 where supported."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_stdout()
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
