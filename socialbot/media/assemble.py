@@ -40,21 +40,38 @@ def _make_gradient_bg(out: Path, duration: float, work: Path) -> None:
           "-pix_fmt", "yuv420p", out.name], cwd=work)
 
 
-def _video_segment(clip: Path, seg_name: str, seg: float, work: Path) -> None:
-    _run(["-stream_loop", "-1", "-i", str(clip.resolve()), "-t", f"{seg:.2f}",
+# Fast cuts hold attention: top-performing Shorts average a visual change every
+# 2-4 seconds. We aim for ~3s segments and cycle the available media to fill the
+# clip, rather than stretching a couple of clips across the whole runtime.
+_TARGET_SEG = 3.0
+
+
+def _video_segment(clip: Path, seg_name: str, seg: float, work: Path, start: float = 0.0) -> None:
+    # `start` seeks into the (looped) clip so a reused clip doesn't replay the
+    # same opening frames back-to-back.
+    pre = ["-stream_loop", "-1"]
+    if start > 0.05:
+        pre += ["-ss", f"{start:.2f}"]
+    _run([*pre, "-i", str(clip.resolve()), "-t", f"{seg:.2f}",
           "-an", "-vf", _NORMALIZE,
           "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
           "-r", str(FPS), seg_name], cwd=work)
 
 
-def _image_segment(img: Path, seg_name: str, seg: float, work: Path) -> None:
-    """Turn a still image into a slow Ken Burns (pan/zoom) video segment."""
+def _image_segment(img: Path, seg_name: str, seg: float, work: Path, zoom_out: bool = False) -> None:
+    """Turn a still image into a slow Ken Burns (pan/zoom) video segment. Reused
+    images alternate zoom-in/zoom-out so a repeat doesn't look like a static hold."""
     frames = max(2, int(round(seg * FPS)))
-    # Pre-scale large so the zoom stays crisp; zoompan does a gentle zoom-in.
+    # Frame-indexed zoom (`on` = output frame) so direction is deterministic.
+    if zoom_out:
+        z = f"max(1.35-0.0012*on,1.0)"
+    else:
+        z = f"min(1.0+0.0012*on,1.35)"
+    # Pre-scale large so the zoom stays crisp.
     vf = (
         f"scale={W * 2}:{H * 2}:force_original_aspect_ratio=increase,"
         f"crop={W * 2}:{H * 2},"
-        f"zoompan=z='min(zoom+0.0012,1.35)':d={frames}:"
+        f"zoompan=z='{z}':d={frames}:"
         f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={W}x{H}:fps={FPS},"
         f"setsar=1,format=yuv420p"
     )
@@ -64,15 +81,29 @@ def _image_segment(img: Path, seg_name: str, seg: float, work: Path) -> None:
 
 
 def _make_media_bg(out: Path, media: list[Path], duration: float, work: Path) -> None:
-    """Build the background from a mix of video clips and still images."""
-    seg = (duration + 1.5) / len(media)
+    """Build the background from a mix of video clips and still images, cutting
+    every ~3s. With 2+ sources we cycle through them so the frame keeps changing;
+    a single source is left as one continuous segment (cutting to itself stutters)."""
+    total = duration + 1.5
+    if len(media) >= 2:
+        # Enough segments to hit ~3s cuts, and at least one per source.
+        n_seg = max(len(media), round(total / _TARGET_SEG))
+    else:
+        n_seg = 1
+    seg = total / n_seg
+
     segments: list[str] = []
-    for i, path in enumerate(media):
+    uses: dict[int, int] = {}
+    for i in range(n_seg):
+        src = i % len(media)
+        reuse = uses.get(src, 0)
+        uses[src] = reuse + 1
+        path = media[src]
         seg_name = f"seg_{i}.mp4"
         if path.suffix.lower() in _IMAGE_EXT:
-            _image_segment(path, seg_name, seg, work)
+            _image_segment(path, seg_name, seg, work, zoom_out=bool(reuse % 2))
         else:
-            _video_segment(path, seg_name, seg, work)
+            _video_segment(path, seg_name, seg, work, start=reuse * seg)
         segments.append(seg_name)
 
     list_file = work / "concat.txt"
