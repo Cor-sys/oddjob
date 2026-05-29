@@ -36,7 +36,7 @@ Source: [ai.google.dev/gemini-api/docs/rate-limits](https://ai.google.dev/gemini
 | Service | Free limit | Notes |
 |---|---|---|
 | **Gemini 2.5 Flash** | 10 RPM · 250,000 TPM · **1,500 RPD** | Used for script writing |
-| **Gemini 2.5 Flash-Lite** | 15 RPM · 250,000 TPM · **1,500 RPD** | Used for trends + fact-check |
+| **Gemini 2.5 Flash-Lite** | 15 RPM · 250,000 TPM · **1,000 RPD** | Used for trends + fact-check (high-frequency workhorse — low latency, ideal for pipelines) |
 | **Pexels** (b-roll footage) | 200 req/hr · 20,000 req/month | More than enough |
 | **NASA** (space footage, keyless) | 30 req/hr · 50 req/day | Register a free key for 1,000 req/hr |
 | **YouTube Data API v3** | 10,000 quota units/day · ~100 units/upload | ~100 uploads/day free |
@@ -52,10 +52,12 @@ Each video uses **3 Gemini calls** (1 Flash + 2 Flash-Lite). At 1,500 RPD per mo
 | Scenario | Flash calls used | Flash-Lite calls used | % of free daily quota |
 |---|---|---|---|
 | 3 videos/day (default) | 3 | 6 | **< 1%** |
-| 50 videos/day | 50 | 100 | ~7% |
-| **Free ceiling** | ~1,500 | ~750 | 100% |
+| 50 videos/day | 50 | 100 | ~10% |
+| **Free ceiling** | ~1,500 | ~1,000 | 100% |
 
-**Practical free limit: ~500 videos/day** before RPD becomes a concern. At the default 3/day you will never come close.
+**Practical free limit: ~500 videos/day** (Flash-Lite is the binding constraint at 1,000 RPD ÷ 2 calls/video). At the default 3/day you will never come close.
+
+> Flash-Lite's 1,000 RPD was 1,500 before April 2026 when Google tightened free-tier quotas. Flash remains at 1,500 RPD.
 
 The limit you are more likely to hit in burst use is **RPM (10 requests/minute for Flash)**. If you generate a large batch very quickly — say 15+ videos at once — you may hit the per-minute cap. Spread across separate runs (as the GitHub Actions schedule does), this is never an issue.
 
