@@ -65,7 +65,10 @@ def _render(item: review.Item, script: Script, topic: Topic) -> None:
     item.meta["voice"] = voice
 
     print("  -> captions...")
-    ass = build_ass(vo.words, item.dir / "captions.ass", title=script.on_screen_title)
+    ass = build_ass(
+        vo.words, item.dir / "captions.ass",
+        title=script.on_screen_title, hook=script.hook_text,
+    )
 
     print("  -> visuals...")
     media = fetch_visuals(topic, script, work)
