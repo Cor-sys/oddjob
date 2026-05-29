@@ -1,20 +1,28 @@
 name: auto-post
 
 # Runs the bot on a schedule: generate -> fact-check -> auto-publish ok clips.
-# Times are UTC. Adjust the cron lines to your timezone.
+# Times are UTC — see README for a timezone conversion table.
+#
+# Default: 3 runs/day x 2 clips each = 6 generated, ~4 published after
+# fact-check filtering (1-2 held/rejected per day is normal).
+#
+# To customize without editing this file, set GitHub Variables in:
+#   Settings -> Secrets and variables -> Actions -> Variables tab
+#   CONTENT_NICHE, CONTENT_TONE, CLIP_SECONDS, POSTS_PER_RUN, etc.
+#   (see README -> Customization for the full list)
 on:
   schedule:
-    - cron: "0 13 * * *"   # ~3 posts/day, spread out
-    - cron: "0 18 * * *"
-    - cron: "0 23 * * *"
-  workflow_dispatch:         # lets you run it manually from the Actions tab
+    - cron: "0 13 * * *"   # run 1 of 3  (adjust times to your timezone)
+    - cron: "0 18 * * *"   # run 2 of 3
+    - cron: "0 23 * * *"   # run 3 of 3
+  workflow_dispatch:
     inputs:
       count:
-        description: "How many clips to generate this run"
-        default: "1"
+        description: "Clips to generate this run (leave blank to use POSTS_PER_RUN)"
+        default: ""
 
 permissions:
-  contents: write            # to persist dedup state back to the repo
+  contents: write
 
 jobs:
   post:
@@ -37,11 +45,18 @@ jobs:
 
       - name: Build .env and restore YouTube token from secrets
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          YOUTUBE_TOKEN: ${{ secrets.YOUTUBE_TOKEN }}
-          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
-          FACEBOOK_PAGE_TOKEN: ${{ secrets.FACEBOOK_PAGE_TOKEN }}
+          GEMINI_API_KEY:          ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY:          ${{ secrets.PEXELS_API_KEY }}
+          YOUTUBE_TOKEN:           ${{ secrets.YOUTUBE_TOKEN }}
+          FACEBOOK_PAGE_ID:        ${{ secrets.FACEBOOK_PAGE_ID }}
+          FACEBOOK_PAGE_TOKEN:     ${{ secrets.FACEBOOK_PAGE_TOKEN }}
+          # ── Customizable via GitHub Variables (Settings -> Variables) ──────
+          CONTENT_NICHE:           ${{ vars.CONTENT_NICHE      || 'AI and emerging technology, space and astronomy, UFOs/UAPs and the search for extraterrestrial life' }}
+          CONTENT_TONE:            ${{ vars.CONTENT_TONE       || 'clear, punchy, plain-spoken explainer; smart and factual but neutral - no hype, no jokes' }}
+          CLIP_SECONDS:            ${{ vars.CLIP_SECONDS        || '25' }}
+          TTS_VOICES:              ${{ vars.TTS_VOICES          || 'en-US-AndrewMultilingualNeural,en-US-BrianMultilingualNeural,en-US-ChristopherNeural,en-US-EricNeural,en-GB-RyanNeural,en-AU-WilliamNeural' }}
+          SPECULATIVE_KEYWORDS:    ${{ vars.SPECULATIVE_KEYWORDS || 'ufo,ufos,uap,uaps,alien,aliens,extraterrestrial,flying saucer,close encounter,abduction,roswell,paranormal,cryptid' }}
+          YOUTUBE_PRIVACY:         ${{ vars.YOUTUBE_PRIVACY     || 'public' }}
         run: |
           mkdir -p secrets
           printf '%s' "$YOUTUBE_TOKEN" > secrets/youtube_token.json
@@ -51,12 +66,13 @@ jobs:
           GEMINI_CALLS_MODEL=gemini-2.5-flash-lite
           GEMINI_FALLBACK_MODEL=gemini-2.5-flash-lite
           PEXELS_API_KEY=${PEXELS_API_KEY}
-          TTS_VOICES=en-US-AndrewMultilingualNeural,en-US-BrianMultilingualNeural,en-US-ChristopherNeural,en-US-EricNeural,en-GB-RyanNeural,en-AU-WilliamNeural
-          CONTENT_NICHE=AI and emerging technology, space and astronomy, UFOs/UAPs and the search for extraterrestrial life
-          CONTENT_TONE=clear, punchy, plain-spoken explainer; smart and factual but neutral - no hype, no jokes
-          CLIP_SECONDS=25
+          TTS_VOICES=${TTS_VOICES}
+          CONTENT_NICHE=${CONTENT_NICHE}
+          CONTENT_TONE=${CONTENT_TONE}
+          CLIP_SECONDS=${CLIP_SECONDS}
+          SPECULATIVE_KEYWORDS=${SPECULATIVE_KEYWORDS}
           YOUTUBE_TOKEN_FILE=secrets/youtube_token.json
-          YOUTUBE_PRIVACY=public
+          YOUTUBE_PRIVACY=${YOUTUBE_PRIVACY}
           FACEBOOK_PAGE_ID=${FACEBOOK_PAGE_ID}
           FACEBOOK_PAGE_TOKEN=${FACEBOOK_PAGE_TOKEN}
           EOF
@@ -64,7 +80,10 @@ jobs:
       - name: Generate and auto-publish
         run: |
           if [ -n "${{ secrets.FACEBOOK_PAGE_TOKEN }}" ]; then TARGETS="youtube,facebook"; else TARGETS="youtube"; fi
-          COUNT="${{ github.event.inputs.count || '1' }}"
+          # Manual dispatch count > POSTS_PER_RUN variable > default of 2
+          COUNT="${{ github.event.inputs.count }}"
+          COUNT="${COUNT:-${{ vars.POSTS_PER_RUN }}}"
+          COUNT="${COUNT:-2}"
           python -m socialbot.cli auto --count "$COUNT" --targets "$TARGETS"
 
       - name: Persist dedup state + spend ledger
