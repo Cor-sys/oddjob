@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from . import costs, factcheck, review
+from . import costs, factcheck, review, topic_history
 from .config import settings
 from .media.assemble import assemble
 from .media.captions import build_ass
@@ -91,10 +91,17 @@ def _render(item: review.Item, script: Script, topic: Topic) -> None:
 def generate(count: int = 3, *, niche: str | None = None, seconds: int | None = None) -> list[review.Item]:
     """Discover trending topics and generate a review item for each."""
     print(f"Discovering {count} trending topics...")
-    topics = discover(count=count, niche=niche)
+    # Over-fetch a small buffer so topic-dedup doesn't starve the batch below target.
+    topics = discover(count=count + 2, niche=niche)
     if not topics:
         print("No topics found.")
         return []
+    # Drop stories we've covered recently (and intra-batch near-duplicates).
+    topics = topic_history.filter_new(topics)[:count]
+    if not topics:
+        print("All discovered topics were recent duplicates; nothing to generate.")
+        return []
+    topic_history.remember(topics)
     items: list[review.Item] = []
     for i, topic in enumerate(topics, 1):
         print(f"[{i}/{len(topics)}] {topic.title}")
