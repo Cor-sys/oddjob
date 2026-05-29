@@ -93,7 +93,7 @@ def upload(
     vid = response["id"]
 
     # Log the upload to the spend ledger. The Data API is free (quota-metered),
-    # so this records 0 dollars and ~1600 quota units — best-effort, never fatal.
+    # so this records 0 dollars and ~100 quota units — best-effort, never fatal.
     try:
         from .. import costs
         size = video_path.stat().st_size if video_path.exists() else None

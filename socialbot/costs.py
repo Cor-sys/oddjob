@@ -34,9 +34,9 @@ from .config import DATA_DIR
 
 COSTS_FILE = DATA_DIR / "costs.jsonl"
 
-# YouTube Data API: a videos.insert call costs ~1600 quota units against the
-# free 10,000 units/day allowance. It costs no money.
-YOUTUBE_UPLOAD_QUOTA_UNITS = 1600
+# YouTube Data API: a videos.insert call costs ~100 quota units against the
+# free 10,000 units/day allowance (changed from 1,600 on Dec 4 2025). No money.
+YOUTUBE_UPLOAD_QUOTA_UNITS = 100
 
 # Published Gemini list prices in USD per 1,000,000 tokens (input, output).
 # These are estimates for the paid tier; free-tier usage bills at $0. Override
