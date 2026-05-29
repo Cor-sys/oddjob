@@ -56,7 +56,8 @@ def _generate(contents: str, config: types.GenerateContentConfig, *, model: str 
     last_err: Exception | None = None
     for idx, model in enumerate(models):
         if idx > 0:
-            print(f"  [llm] {models[idx - 1]} unavailable; trying {model}")
+            reason = f" ({type(last_err).__name__}: {getattr(last_err, 'code', None) or last_err})"
+            print(f"  [llm] {models[idx - 1]} unavailable{reason}; trying {model}")
         for attempt in range(_MAX_TRIES):
             try:
                 resp = _client().models.generate_content(
