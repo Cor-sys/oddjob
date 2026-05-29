@@ -173,3 +173,32 @@ def auto_run(count: int = 3, *, targets: tuple[str, ...] = ("youtube", "facebook
             print(f"  [auto] publish failed for {it.id}: {e}")
     print(f"[auto] done: published {len(published)}/{len(items)}")
     return published
+
+
+def auto_run_custom_topic(topic: Topic, *, targets: tuple[str, ...] = ("youtube", "facebook")) -> list[dict]:
+    """Fully automated for a user-provided topic (no trend discovery). Publishes
+    unless the fact-checker actively debunks the content ('rejected'). A
+    'needs_review' result still publishes — the user provided the content, so
+    unverifiable claims are expected and trusted by default."""
+    from .publish import publish_item
+
+    it = generate_from_topic(topic)
+    verdict = it.meta.get("factcheck", {}).get("verdict")
+    if not it.clip_path:
+        print(f"  [auto] hold {it.id}: no clip rendered")
+        return []
+    if verdict == factcheck.REJECTED:
+        print(f"  [auto] hold {it.id}: fact-checker rejected the content — not publishing")
+        return []
+    if verdict != factcheck.OK:
+        print(f"  [auto] {it.id}: user-provided topic — publishing despite verdict={verdict}")
+    review.approve(it.id)
+    fresh = review.get(it.id)
+    print(f"  [auto] publishing {it.id} -> {targets}")
+    try:
+        results = publish_item(fresh, targets=targets)
+        print(f"[auto] done: published 1/1")
+        return [{"id": it.id, "results": results}]
+    except Exception as e:
+        print(f"  [auto] publish failed for {it.id}: {e}")
+        return []

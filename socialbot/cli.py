@@ -44,9 +44,19 @@ def _cmd_trends(args) -> int:
 
 
 def _cmd_generate(args) -> int:
-    from .pipeline import generate
+    from .pipeline import generate, generate_from_topic
+    from .trends import Topic
 
-    items = generate(count=args.count, niche=args.niche, seconds=args.seconds)
+    if args.topic:
+        topic = Topic(
+            title=args.topic,
+            summary=args.facts or args.topic,
+            why_trending="user-provided",
+            keywords=[k.strip() for k in (args.keywords or "").split(",") if k.strip()],
+        )
+        items = [generate_from_topic(topic, seconds=args.seconds)]
+    else:
+        items = generate(count=args.count, niche=args.niche, seconds=args.seconds)
     print(f"\nGenerated {len(items)} item(s). Review with: python -m socialbot.cli list")
     return 0
 
@@ -141,14 +151,24 @@ def _cmd_youtube_auth(args) -> int:
 
 def _cmd_auto(args) -> int:
     from .config import DATA_DIR
-    from .pipeline import auto_run
+    from .pipeline import auto_run, auto_run_custom_topic
+    from .trends import Topic
 
     pause_file = DATA_DIR / "PAUSED"
     if pause_file.exists():
         print(f"auto is PAUSED — delete {pause_file} to resume.")
         return 0
     targets = tuple(t.strip() for t in args.targets.split(",") if t.strip())
-    auto_run(count=args.count, targets=targets, niche=args.niche)
+    if args.topic:
+        topic = Topic(
+            title=args.topic,
+            summary=args.facts or args.topic,
+            why_trending="user-provided",
+            keywords=[k.strip() for k in (args.keywords or "").split(",") if k.strip()],
+        )
+        auto_run_custom_topic(topic, targets=targets)
+    else:
+        auto_run(count=args.count, targets=targets, niche=args.niche)
     return 0
 
 
@@ -242,6 +262,12 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--count", type=int, default=3)
     g.add_argument("--niche", default=None)
     g.add_argument("--seconds", type=int, default=None)
+    g.add_argument("--topic", default=None, metavar="TITLE",
+                   help="skip trend discovery and use this custom title instead")
+    g.add_argument("--facts", default=None, metavar="TEXT",
+                   help="key facts / description for the custom topic")
+    g.add_argument("--keywords", default=None, metavar="KW1,KW2",
+                   help="comma-separated b-roll search keywords for custom topic")
     g.set_defaults(func=_cmd_generate)
 
     ls = sub.add_parser("list", help="list review queue")
@@ -272,6 +298,12 @@ def build_parser() -> argparse.ArgumentParser:
     au.add_argument("--count", type=int, default=3)
     au.add_argument("--niche", default=None)
     au.add_argument("--targets", default="youtube,facebook")
+    au.add_argument("--topic", default=None, metavar="TITLE",
+                   help="use a custom topic instead of trend discovery")
+    au.add_argument("--facts", default=None, metavar="TEXT",
+                   help="key facts / description for the custom topic")
+    au.add_argument("--keywords", default=None, metavar="KW1,KW2",
+                   help="comma-separated b-roll keywords for custom topic")
     au.set_defaults(func=_cmd_auto)
 
     co = sub.add_parser("costs", help="show estimated spend (Gemini) + YouTube posting usage")
