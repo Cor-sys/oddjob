@@ -7,7 +7,11 @@ on:
     - cron: "0 13 * * *"   # ~3 posts/day, spread out
     - cron: "0 18 * * *"
     - cron: "0 23 * * *"
-  workflow_dispatch: {}      # lets you run it manually from the Actions tab
+  workflow_dispatch:         # lets you run it manually from the Actions tab
+    inputs:
+      count:
+        description: "How many clips to generate this run"
+        default: "1"
 
 permissions:
   contents: write            # to persist dedup state back to the repo
@@ -60,7 +64,8 @@ jobs:
       - name: Generate and auto-publish
         run: |
           if [ -n "${{ secrets.FACEBOOK_PAGE_TOKEN }}" ]; then TARGETS="youtube,facebook"; else TARGETS="youtube"; fi
-          python -m socialbot.cli auto --count 1 --targets "$TARGETS"
+          COUNT="${{ github.event.inputs.count || '1' }}"
+          python -m socialbot.cli auto --count "$COUNT" --targets "$TARGETS"
 
       - name: Persist uniqueness (dedup) state
         run: |
