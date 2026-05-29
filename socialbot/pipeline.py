@@ -1,6 +1,8 @@
 """Orchestrates: trends -> script -> fact-check -> media -> review queue."""
 from __future__ import annotations
 
+import re
+
 from . import costs, factcheck, review
 from .config import settings
 from .media.assemble import assemble
@@ -103,21 +105,54 @@ def generate(count: int = 3, *, niche: str | None = None, seconds: int | None = 
     return items
 
 
+def _is_speculative(meta: dict) -> bool:
+    """True if the topic is inherently unverifiable subject matter (UFO/UAP/alien/
+    paranormal). For these, 'needs_review' is expected and shouldn't block an
+    auto-post — but 'rejected' (actively debunked) still does."""
+    topic = meta.get("topic", {})
+    haystack = " ".join([
+        meta.get("topic_title", ""),
+        topic.get("summary", ""),
+        topic.get("why_trending", ""),
+        " ".join(topic.get("keywords", [])),
+    ]).lower()
+    return any(
+        re.search(rf"\b{re.escape(kw)}\b", haystack)
+        for kw in settings.speculative_keywords
+    )
+
+
+def _publishable_verdict(meta: dict) -> bool:
+    """Decide whether a clip clears the auto-publish gate. Normal topics need a
+    clean 'ok'. Speculative ones (UFO/UAP/...) may publish on 'needs_review' too,
+    since the claim is unconfirmable — but never on 'rejected' (debunked)."""
+    verdict = meta.get("factcheck", {}).get("verdict")
+    if verdict == factcheck.OK:
+        return True
+    return verdict == factcheck.NEEDS_REVIEW and _is_speculative(meta)
+
+
 def auto_run(count: int = 3, *, targets: tuple[str, ...] = ("youtube", "facebook"),
              niche: str | None = None) -> list[dict]:
-    """Fully automated: generate `count` clips and publish the ones that PASS
-    fact-check (verdict 'ok') with no human review. Clips that are needs_review
-    or rejected are left in the queue (not posted). Returns publish results."""
-    from .factcheck import OK
+    """Fully automated: generate `count` clips and publish the ones that clear the
+    fact-check gate, with no human review. Normal topics must pass cleanly ('ok');
+    speculative UFO/UAP-style topics may also post on 'needs_review' (see
+    SPECULATIVE_KEYWORDS), but anything 'rejected' (debunked) is always held.
+    Returns publish results."""
     from .publish import publish_item
 
     items = generate(count=count, niche=niche)
     published: list[dict] = []
     for it in items:
         verdict = it.meta.get("factcheck", {}).get("verdict")
-        if verdict != OK or not it.clip_path:
+        if not it.clip_path:
+            print(f"  [auto] hold {it.id}: no clip (verdict={verdict}), not publishing")
+            continue
+        if not _publishable_verdict(it.meta):
             print(f"  [auto] hold {it.id}: verdict={verdict}, not publishing")
             continue
+        if verdict != factcheck.OK:
+            print(f"  [auto] {it.id}: speculative topic — publishing despite verdict={verdict}")
         review.approve(it.id)
         fresh = review.get(it.id)
         print(f"  [auto] publishing {it.id} -> {targets}")

@@ -105,6 +105,47 @@ def test_zero_usage_is_not_recorded():
     assert costs._read_ledger() == []
 
 
+def test_speculative_gate():
+    """UFO/UAP topics publish on needs_review; normal topics don't; debunked
+    (rejected) and clipless items never publish."""
+    from socialbot import pipeline
+
+    ufo = {
+        "topic_title": "Ex-UFO Investigator Alleges Recovered Bodies",
+        "topic": {"summary": "A former investigator claims...", "keywords": ["ufo", "roswell"]},
+        "factcheck": {"verdict": "needs_review"},
+    }
+    normal = {
+        "topic_title": "New AI chip announced",
+        "topic": {"summary": "A company unveiled a processor.", "keywords": ["semiconductor"]},
+        "factcheck": {"verdict": "needs_review"},
+    }
+
+    assert pipeline._is_speculative(ufo) is True
+    assert pipeline._is_speculative(normal) is False
+
+    # speculative + needs_review -> publishable; normal + needs_review -> not
+    assert pipeline._publishable_verdict(ufo) is True
+    assert pipeline._publishable_verdict(normal) is False
+
+    # a clean 'ok' is always publishable regardless of topic
+    normal_ok = {**normal, "factcheck": {"verdict": "ok"}}
+    assert pipeline._publishable_verdict(normal_ok) is True
+
+    # rejected (debunked) is never publishable, even for UFO topics
+    ufo_rejected = {**ufo, "factcheck": {"verdict": "rejected"}}
+    assert pipeline._publishable_verdict(ufo_rejected) is False
+
+
+def test_speculative_word_boundary():
+    """Substring false-positives are avoided (e.g. 'alienate' isn't 'alien')."""
+    from socialbot import pipeline
+
+    meta = {"topic_title": "How tariffs alienate trade partners",
+            "topic": {"summary": "Economics piece.", "keywords": ["trade"]}}
+    assert pipeline._is_speculative(meta) is False
+
+
 def _run_all():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

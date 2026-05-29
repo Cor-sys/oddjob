@@ -52,6 +52,16 @@ class Settings:
     tts_voices: list[str] = field(default_factory=lambda: _csv(_env("TTS_VOICES", _DEFAULT_VOICE_POOL)))
 
     content_niche: str = field(default_factory=lambda: _env("CONTENT_NICHE"))
+    # Topics matching these keywords are treated as inherently unverifiable
+    # subject matter (UFOs/aliens/etc.): in `auto` mode they're allowed to
+    # publish on a 'needs_review' fact-check verdict, since the claim can't be
+    # confirmed — but a 'rejected' (actively debunked) verdict still blocks them.
+    # Every other topic still requires a clean 'ok' to auto-publish.
+    speculative_keywords: list[str] = field(default_factory=lambda: _csv(_env(
+        "SPECULATIVE_KEYWORDS",
+        "ufo,ufos,uap,uaps,alien,aliens,extraterrestrial,flying saucer,"
+        "close encounter,abduction,roswell,paranormal,cryptid",
+    )))
     content_tone: str = field(default_factory=lambda: _env(
         "CONTENT_TONE",
         "clear, punchy, plain-spoken explainer; smart and factual but neutral — no hype, no jokes",
