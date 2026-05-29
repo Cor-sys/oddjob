@@ -29,28 +29,37 @@ Each video makes **3 Gemini API calls**:
 | Script writing | gemini-2.5-flash | No |
 | Fact-check | gemini-2.5-flash-lite | Yes |
 
-### Free tier limits (as of 2026)
+### Free tier limits (as of May 2026)
 
-> Google does not publish exact free-tier numbers in their docs — they change without notice and vary by project. Check your real limits at [aistudio.google.com/rate-limit](https://aistudio.google.com/rate-limit). The figures below reflect reported real-world experience.
+Source: [ai.google.dev/gemini-api/docs/rate-limits](https://ai.google.dev/gemini-api/docs/rate-limits) and [ai.google.dev/gemini-api/docs/pricing](https://ai.google.dev/gemini-api/docs/pricing)
 
 | Service | Free limit | Notes |
 |---|---|---|
-| **Gemini — regular calls** | ~250–500 req/day | Script writing (no grounding) |
-| **Gemini — grounded calls** | **~20 req/day per model** | Trend + fact-check calls. This is the binding constraint |
-| **Pexels** (b-roll footage) | 200 req/hr · 20,000 req/month | Generous for this use |
+| **Gemini 2.5 Flash** | 10 RPM · 250,000 TPM · **1,500 RPD** | Used for script writing |
+| **Gemini 2.5 Flash-Lite** | 15 RPM · 250,000 TPM · **1,500 RPD** | Used for trends + fact-check |
+| **Pexels** (b-roll footage) | 200 req/hr · 20,000 req/month | More than enough |
 | **NASA** (space footage, keyless) | 30 req/hr · 50 req/day | Register a free key for 1,000 req/hr |
 | **YouTube Data API v3** | 10,000 quota units/day · ~100 units/upload | ~100 uploads/day free |
 | **edge-tts** (voiceover) | Unlimited — no key needed | Free Microsoft neural voices |
 | **GitHub Actions** | 2,000 min/month (free accounts) | Each run takes ~3 min |
 
+> Check your project's active limits at [aistudio.google.com/rate-limit](https://aistudio.google.com/rate-limit).
+
 ### The math
 
-This bot uses **2 grounded calls per video** (trends + fact-check). With ~20 free grounded calls/day per model (flash-lite handles both):
+Each video uses **3 Gemini calls** (1 Flash + 2 Flash-Lite). At 1,500 RPD per model on the free tier:
 
-- **Free ceiling: ~10 videos/day** before hitting the grounded-call limit
-- **At 3 posts/day**: you use ~6 grounded calls — within the free tier, but with limited headroom for failed retries or reruns
+| Scenario | Flash calls used | Flash-Lite calls used | % of free daily quota |
+|---|---|---|---|
+| 3 videos/day (default) | 3 | 6 | **< 1%** |
+| 50 videos/day | 50 | 100 | ~7% |
+| **Free ceiling** | ~1,500 | ~750 | 100% |
 
-For casual testing and manual use, the free tier is fine. For a reliable fully-automated 3-posts/day schedule, connect a billing account. **This does not make it expensive:**
+**Practical free limit: ~500 videos/day** before RPD becomes a concern. At the default 3/day you will never come close.
+
+The limit you are more likely to hit in burst use is **RPM (10 requests/minute for Flash)**. If you generate a large batch very quickly — say 15+ videos at once — you may hit the per-minute cap. Spread across separate runs (as the GitHub Actions schedule does), this is never an issue.
+
+For casual testing and normal use the free tier is entirely sufficient. Connecting a billing account primarily unlocks higher RPM ceilings and removes any throttling risk. **It does not change the cost much:**
 
 ### What it costs on a billed account
 
