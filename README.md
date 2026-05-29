@@ -29,49 +29,38 @@ Each video makes **3 Gemini API calls**:
 | Script writing | gemini-2.5-flash | No |
 | Fact-check | gemini-2.5-flash-lite | Yes |
 
-### Free tier limits (as of May 2026)
+### Free tier limits (verified from AI Studio rate-limit dashboard)
 
-Sources: [ai.google.dev/gemini-api/docs/rate-limits](https://ai.google.dev/gemini-api/docs/rate-limits) · [ai.google.dev/gemini-api/docs/pricing](https://ai.google.dev/gemini-api/docs/pricing)
+> Always check your own project at [aistudio.google.com/rate-limit](https://aistudio.google.com/rate-limit) — limits vary by project and Google adjusts them without notice.
 
 | Service | Free limit | Notes |
 |---|---|---|
-| **Gemini 2.5 Flash** (regular calls) | 10 RPM · **1,500 RPD** | Script writing — not the bottleneck |
-| **Gemini 2.5 Flash-Lite** (regular calls) | 15 RPM · **1,000 RPD** | High-frequency pipeline workhorse — low latency, built for automation |
-| **⚠️ Gemini — grounded calls** | **~20/day on free tier** | Trends + fact-check both use Google Search grounding. **This is the real wall you will hit.** |
+| **Gemini 2.5 Flash** | 5 RPM · **20 RPD** | Script writing |
+| **Gemini 2.5 Flash-Lite** | 10 RPM · **20 RPD** | Trends + fact-check |
+| **Gemini search grounding** | **500 RPD** (separate quota) | The live-web search tool has its own more generous counter |
 | **Pexels** (b-roll footage) | 200 req/hr · 20,000 req/month | More than enough |
 | **NASA** (space footage, keyless) | 30 req/hr · 50 req/day | Register a free key for 1,000 req/hr |
 | **YouTube Data API v3** | 10,000 quota units/day · ~100 units/upload | ~100 uploads/day free |
 | **edge-tts** (voiceover) | Unlimited — no key needed | Free Microsoft neural voices |
 | **GitHub Actions** | 2,000 min/month (free accounts) | Each run takes ~3 min |
 
-> Check your project's active limits at [aistudio.google.com/rate-limit](https://aistudio.google.com/rate-limit).
-
-### Why grounded calls are the real constraint
-
-**Google Search grounding** (what lets the bot search the live web for trends and verify facts) is a separate feature with its own quota on top of the general RPD:
-
-| Tier | Grounding quota |
-|---|---|
-| **Free tier** | ~20 grounded calls/day total across your project |
-| **Billed (Tier 1)** | **1,500 free grounding queries/day**, then $35/1,000 |
-
-This bot uses 2 grounded calls per video. At 3 posts/day that is 6 grounding calls — you burn through the ~20/day free limit quickly once you factor in any testing, reruns, or retries on the same day. This is exactly why switching to a billed account is strongly recommended for daily automation, even though the dollar cost is near zero.
-
 ### The math
 
-| Scenario | Grounded calls | Regular calls | Free tier OK? |
+Each video uses **3 calls**: 1 Flash (script) + 2 Flash-Lite (trends + fact-check). The RPD of **20** is the binding constraint:
+
+| Scenario | Flash used | Flash-Lite used | RPD remaining |
 |---|---|---|---|
-| 3 videos/day (scheduled) | 6 of ~20 free | 3 of 1,000–1,500 free | ⚠️ Yes, but little headroom |
-| 3 videos/day (billed) | 6 of 1,500 free | 3 of 1,000–1,500 free | ✅ < 1% of every quota |
-| **Free ceiling** | ~10 videos/day | ~500 videos/day | — |
+| 3 videos/day, no manual tests | 3 / 20 | 6 / 20 | Flash 17 · Lite 14 |
+| 3 videos/day + 1 manual test run | 4 / 20 | 8 / 20 | Flash 16 · Lite 12 |
+| **Free ceiling** | ~20 videos/day | ~10 videos/day | 0 |
 
-**The free tier works for occasional testing. For reliable daily automation, enable billing** — the actual cost is negligible:
+**Practical free limit: ~10 videos/day** (Flash-Lite runs out first at 2 calls per video). The default 3/day schedule fits easily — but **manual test runs on the same day eat into that budget**, so run tests sparingly.
 
-> Flash-Lite's general RPD was 1,500 before April 2026 when Google tightened free-tier quotas; it is now 1,000. The grounding quota is separate from and lower than the RPD.
+With billing (Tier 1): Flash gets ~10,000 RPD, Flash-Lite gets **Unlimited**.
 
 ### What it costs on a billed account
 
-You only pay for token usage — grounding is included free (1,500 queries/day) and everything else is $0:
+Token usage is the only charge — everything else stays $0:
 
 | Per video | Approx. cost |
 |---|---|
@@ -81,7 +70,7 @@ You only pay for token usage — grounding is included free (1,500 queries/day) 
 | **Total per video** | **~$0.01 – $0.02** |
 | Voiceover, footage, YouTube posting | **$0.00** (always free) |
 
-**At 3 videos/day that is roughly $1–2/month.** YouTube's Data API, Pexels, edge-tts, and NASA remain free regardless of posting volume.
+**At 3 videos/day that is roughly $1–2/month.** YouTube's Data API, Pexels, edge-tts, and NASA remain free regardless of volume.
 
 > The bot logs every API call to `data/costs.jsonl`. Run `python -m socialbot.cli costs` to see a live breakdown by stage and model.
 
