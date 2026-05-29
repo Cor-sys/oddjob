@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from . import costs
 from .llm import grounded_json
 from .script import Script
 
@@ -72,7 +73,8 @@ Return ONLY a JSON object:
 }}"""
 
     try:
-        data, sources = grounded_json(prompt, system=_SYSTEM)
+        with costs.track(stage="factcheck"):
+            data, sources = grounded_json(prompt, system=_SYSTEM)
     except Exception as e:
         # Model refused / returned prose / transient error — hold for safety
         # rather than crashing the topic. needs_review means "do not auto-publish".

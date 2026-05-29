@@ -67,10 +67,10 @@ jobs:
           COUNT="${{ github.event.inputs.count || '1' }}"
           python -m socialbot.cli auto --count "$COUNT" --targets "$TARGETS"
 
-      - name: Persist uniqueness (dedup) state
+      - name: Persist dedup state + spend ledger
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/used_broll.json data/used_nasa.json data/last_voice.txt 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update dedup state [skip ci]"
+          git add data/used_broll.json data/used_nasa.json data/last_voice.txt data/costs.jsonl 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "chore: update dedup + cost state [skip ci]"
           git push || true
