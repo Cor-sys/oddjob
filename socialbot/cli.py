@@ -11,6 +11,8 @@ Examples:
   python -m socialbot.cli reject <id> --reason "boring"
   python -m socialbot.cli publish <id> --targets youtube,facebook
   python -m socialbot.cli publish --all-approved
+  python -m socialbot.cli costs
+  python -m socialbot.cli costs --youtube
 """
 from __future__ import annotations
 
@@ -150,6 +152,44 @@ def _cmd_auto(args) -> int:
     return 0
 
 
+def _cmd_costs(args) -> int:
+    import json as _json
+
+    from . import costs
+
+    s = costs.summary()
+    if args.json:
+        print(_json.dumps(s, indent=2))
+        return 0
+
+    yt = s["youtube"]
+    if args.youtube:
+        print("YouTube posting")
+        print("─" * 32)
+        print(f"  videos uploaded:   {yt['uploads']}")
+        print(f"  quota units used:  {yt['quota_units_used']:,} (free tier: 10,000/day)")
+        print(f"  money spent:       ${yt['posting_cost_usd']:.2f}  (Data API is free)")
+        return 0
+
+    print("Spend summary (estimated, Gemini list prices)")
+    print("─" * 46)
+    print(f"  total estimated cost:  ${s['total_estimated_cost_usd']:.4f}")
+    print(f"  tokens in / out:       {s['total_input_tokens']:,} / {s['total_output_tokens']:,}")
+    print(f"  Gemini calls:          {s['llm_calls']}")
+    if s["by_stage"]:
+        print("\n  by stage:")
+        for stage, cost in s["by_stage"].items():
+            print(f"    {stage:12s} ${cost:.4f}")
+    if s["by_model"]:
+        print("\n  by model:")
+        for model, m in s["by_model"].items():
+            print(f"    {model:26s} ${m['cost_usd']:.4f}  ({m['calls']} calls)")
+    print("\n  YouTube posting:")
+    print(f"    {yt['uploads']} upload(s), {yt['quota_units_used']:,} quota units, "
+          f"${yt['posting_cost_usd']:.2f} spent (free API)")
+    return 0
+
+
 def _cmd_serve(args) -> int:
     from .web.app import serve
 
@@ -233,6 +273,11 @@ def build_parser() -> argparse.ArgumentParser:
     au.add_argument("--niche", default=None)
     au.add_argument("--targets", default="youtube,facebook")
     au.set_defaults(func=_cmd_auto)
+
+    co = sub.add_parser("costs", help="show estimated spend (Gemini) + YouTube posting usage")
+    co.add_argument("--youtube", action="store_true", help="show only the YouTube-posting view")
+    co.add_argument("--json", action="store_true", help="emit the full summary as JSON")
+    co.set_defaults(func=_cmd_costs)
 
     sv = sub.add_parser("serve", help="launch the web review dashboard")
     sv.add_argument("--host", default="127.0.0.1")

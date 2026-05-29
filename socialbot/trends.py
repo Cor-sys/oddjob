@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from . import costs
 from .config import settings
 from .llm import grounded_json
 
@@ -59,7 +60,8 @@ For each story return an object with:
 
 Return ONLY a JSON array of these objects. No prose, no markdown."""
 
-    data, sources = grounded_json(prompt, system=_SYSTEM)
+    with costs.track(stage="trends"):
+        data, sources = grounded_json(prompt, system=_SYSTEM)
     if isinstance(data, dict):
         data = data.get("topics") or next(
             (v for v in data.values() if isinstance(v, list)), []

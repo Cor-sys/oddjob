@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from . import costs
 from .config import settings
 from .llm import json_call
 from .trends import Topic
@@ -71,7 +72,8 @@ Requirements:
 Return ONLY a JSON object with keys:
   on_screen_title, narration, description, hashtags, broll_keywords"""
 
-    data = json_call(prompt, system=_SYSTEM)
+    with costs.track(stage="script"):
+        data = json_call(prompt, system=_SYSTEM)
     return Script(
         topic_title=topic.title,
         on_screen_title=str(data.get("on_screen_title", topic.title)).strip(),

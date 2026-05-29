@@ -1,7 +1,7 @@
 """Orchestrates: trends -> script -> fact-check -> media -> review queue."""
 from __future__ import annotations
 
-from . import factcheck, review
+from . import costs, factcheck, review
 from .config import settings
 from .media.assemble import assemble
 from .media.captions import build_ass
@@ -14,36 +14,43 @@ from .trends import Topic, discover
 def generate_from_topic(topic: Topic, *, seconds: int | None = None, build_video: bool = True) -> review.Item:
     """Run one topic through the full pipeline, returning a queued review Item."""
     seconds = seconds or settings.clip_seconds
-    print(f"  -> scripting: {topic.title}")
-    script = write_script(topic, seconds)
+    # Tag every Gemini call below with this topic so its spend rolls up per-video.
+    with costs.track(topic=topic.title) as run:
+        print(f"  -> scripting: {topic.title}")
+        script = write_script(topic, seconds)
 
-    print("  -> fact-checking...")
-    fc = factcheck.vet(script)
-    print(f"     verdict={fc.verdict} ({fc.summary})")
+        print("  -> fact-checking...")
+        fc = factcheck.vet(script)
+        print(f"     verdict={fc.verdict} ({fc.summary})")
 
-    meta = {
-        "topic": topic.to_dict(),
-        "topic_title": topic.title,
-        "on_screen_title": script.on_screen_title,
-        "script": script.to_dict(),
-        "factcheck": fc.to_dict(),
-        "clip_seconds": seconds,
-    }
+        meta = {
+            "topic": topic.to_dict(),
+            "topic_title": topic.title,
+            "on_screen_title": script.on_screen_title,
+            "script": script.to_dict(),
+            "factcheck": fc.to_dict(),
+            "clip_seconds": seconds,
+            # What the Gemini calls for this video cost (estimate, list prices).
+            "generation_cost": run.as_dict(),
+        }
 
-    # Don't waste compute rendering video for content the checker rejected.
-    if fc.verdict == factcheck.REJECTED:
-        meta["status"] = review.REJECTED
-        meta["reject_reason"] = f"fact-check: {fc.summary}"
+        # Don't waste compute rendering video for content the checker rejected.
+        if fc.verdict == factcheck.REJECTED:
+            meta["status"] = review.REJECTED
+            meta["reject_reason"] = f"fact-check: {fc.summary}"
+            item = review.create(meta)
+            print(f"  -> REJECTED by fact-check, saved {item.id}")
+            return item
+
         item = review.create(meta)
-        print(f"  -> REJECTED by fact-check, saved {item.id}")
+        if build_video:
+            _render(item, script, topic)
+
+        # Refresh the stamped cost so it includes every call made for this video.
+        item.meta["generation_cost"] = run.as_dict()
+        item.save()
+        print(f"  -> queued for review: {item.id} (gen cost ~${run.cost_usd:.4f})")
         return item
-
-    item = review.create(meta)
-    if build_video:
-        _render(item, script, topic)
-
-    print(f"  -> queued for review: {item.id}")
-    return item
 
 
 def _render(item: review.Item, script: Script, topic: Topic) -> None:

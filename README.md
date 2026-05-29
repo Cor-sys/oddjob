@@ -88,11 +88,32 @@ python -m socialbot.cli reject  <id> --reason "off-brand"
 # publish (only works on approved items)
 python -m socialbot.cli publish <id> --targets youtube,facebook
 python -m socialbot.cli publish --all-approved
+
+# how much have we spent?
+python -m socialbot.cli costs            # full breakdown by stage + model
+python -m socialbot.cli costs --youtube  # just the YouTube-posting view
+python -m socialbot.cli costs --json     # machine-readable
 ```
 
 Generated clips live in `data/pending/<id>/`; published ones move to
 `data/published/<id>/`. Each folder has a `meta.json` with the script, the
-fact-check report, and the publish results.
+fact-check report, the publish results, and a `generation_cost` block (what that
+one video's Gemini calls cost).
+
+## Cost tracking
+
+The only paid dependency is the **Gemini API** (trend discovery, scripting,
+fact-check). Everything else is free: posting to **YouTube** uses the Data API
+(quota-metered, **$0**), and edge-tts / Pexels / NASA are free too.
+
+Every Gemini call's token usage and estimated cost is appended to
+`data/costs.jsonl` (a tracked file, so the scheduled job accumulates spend across
+runs), and each YouTube upload is logged with its quota cost. View the running
+total with `python -m socialbot.cli costs`.
+
+Costs are **estimates** from published list prices (override with `GEMINI_PRICES`
+in `.env`); free-tier usage actually bills at $0. The Google Cloud / AI Studio
+billing console is the authoritative source for real dollars spent.
 
 ## 5. Scheduling (optional)
 

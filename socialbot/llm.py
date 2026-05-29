@@ -71,6 +71,8 @@ def _generate(contents: str, config: types.GenerateContentConfig, *, model: str 
                 last_err = e
             else:
                 if (resp.text or "").strip():
+                    from . import costs
+                    costs.record_llm(model, resp)
                     return resp
                 last_err = ValueError("empty response from model")
             if attempt < _MAX_TRIES - 1:

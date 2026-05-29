@@ -91,4 +91,14 @@ def upload(
         _, response = request.next_chunk()
 
     vid = response["id"]
+
+    # Log the upload to the spend ledger. The Data API is free (quota-metered),
+    # so this records 0 dollars and ~1600 quota units — best-effort, never fatal.
+    try:
+        from .. import costs
+        size = video_path.stat().st_size if video_path.exists() else None
+        costs.record_youtube_upload(vid, file_size=size)
+    except Exception:
+        pass
+
     return {"platform": "youtube", "id": vid, "url": f"https://youtu.be/{vid}"}

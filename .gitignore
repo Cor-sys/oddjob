@@ -12,8 +12,8 @@ data/work/*
 # control/log files (kept local; never commit)
 data/PAUSED
 data/auto.log
-# NOTE: data/used_*.json and data/last_voice.txt ARE tracked so the cloud job
-# can persist uniqueness (dedup) state between runs.
+# NOTE: data/used_*.json, data/last_voice.txt and data/costs.jsonl ARE tracked
+# so the cloud job can persist dedup state + the spend ledger between runs.
 
 # Local editor/agent settings
 .claude/settings.local.json
