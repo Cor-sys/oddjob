@@ -1,6 +1,6 @@
 # Social Media Bot
 
-An automated short-form video channel that **runs entirely in the cloud for free** (or near-free at scale). It discovers trending stories, writes a punchy script, fact-checks it, generates a voiced + captioned vertical clip, and posts it to **YouTube** — fully hands-off, on a schedule.
+An automated short-form video channel that runs **entirely in the cloud** and is **free to start**. It discovers trending stories, writes a punchy script, fact-checks it, generates a voiced + captioned vertical clip, and posts it to **YouTube** on a schedule — fully hands-off.
 
 ```
 Google Search (grounded)
@@ -10,67 +10,124 @@ Google Search (grounded)
    → voiceover (edge-tts, free, 200+ voices)
    → b-roll (Pexels free / NASA public domain)
    → ffmpeg assemble  1080 × 1920 · 25s · hook overlay · fast cuts
-   → auto-publish to YouTube  (3× / day on GitHub Actions, no server needed)
+   → auto-publish to YouTube  (3× / day via GitHub Actions, no server needed)
 ```
 
-Everything except the AI text generation is **free with no limits**. The Gemini API has a free tier that covers light usage, and even at full 3-posts/day automation the cost is well under $2/month.
+Everything except the Gemini API calls is **free with no meaningful limits**. Gemini has a free tier suitable for testing and light use; for a reliable 3-posts/day schedule a billing account is recommended — at roughly **$0.01–$0.02 per video** the cost is negligible.
 
 ---
 
-## Can I really run this for free?
+## Can I run this for free?
 
-**Yes — here's the math.**
+**Yes, with caveats — here is the honest breakdown.**
 
-Each video the bot generates makes **3 Gemini API calls**:
+Each video makes **3 Gemini API calls**:
 
-| Call | Model | Purpose |
+| Call | Model | Uses Google Search grounding? |
 |---|---|---|
-| Trend discovery | gemini-2.5-flash-lite | Find today's story (shared across a batch) |
-| Script | gemini-2.5-flash | Write the narration + hook |
-| Fact-check | gemini-2.5-flash-lite | Verify claims against live search |
+| Trend discovery | gemini-2.5-flash-lite | Yes |
+| Script writing | gemini-2.5-flash | No |
+| Fact-check | gemini-2.5-flash-lite | Yes |
 
 ### Free tier limits (as of 2026)
 
-| Service | Free allowance | Resets |
+> Google does not publish exact free-tier numbers in their docs — they change without notice and vary by project. Check your real limits at [aistudio.google.com/rate-limit](https://aistudio.google.com/rate-limit). The figures below reflect reported real-world experience.
+
+| Service | Free limit | Notes |
 |---|---|---|
-| **Gemini 2.5 Flash** | ~500 req/day · 10 RPM | Daily midnight PT |
-| **Gemini 2.5 Flash-Lite** | ~1,000 req/day · 15 RPM | Daily midnight PT |
-| **Pexels** (b-roll) | 200 req/hr · 20,000 req/month | Monthly |
-| **NASA** (space footage, keyless) | 30 req/hr · 50 req/day per IP | Hourly |
-| **YouTube Data API v3** | 10,000 quota units/day · ~100 units/upload | Daily midnight PT |
-| **edge-tts** (voiceover) | Unlimited — no key needed | — |
-| **GitHub Actions** | 2,000 minutes/month (free accounts) | Monthly |
+| **Gemini — regular calls** | ~250–500 req/day | Script writing (no grounding) |
+| **Gemini — grounded calls** | **~20 req/day per model** | Trend + fact-check calls. This is the binding constraint |
+| **Pexels** (b-roll footage) | 200 req/hr · 20,000 req/month | Generous for this use |
+| **NASA** (space footage, keyless) | 30 req/hr · 50 req/day | Register a free key for 1,000 req/hr |
+| **YouTube Data API v3** | 10,000 quota units/day · ~100 units/upload | ~100 uploads/day free |
+| **edge-tts** (voiceover) | Unlimited — no key needed | Free Microsoft neural voices |
+| **GitHub Actions** | 2,000 min/month (free accounts) | Each run takes ~3 min |
 
-> **Note:** Google adjusts Gemini free-tier limits periodically. Check your current limits at [aistudio.google.com](https://aistudio.google.com) under **Rate limits**.
+### The math
 
-### How many videos can you make for free?
+This bot uses **2 grounded calls per video** (trends + fact-check). With ~20 free grounded calls/day per model (flash-lite handles both):
 
-At 3 calls per video:
+- **Free ceiling: ~10 videos/day** before hitting the grounded-call limit
+- **At 3 posts/day**: you use ~6 grounded calls — within the free tier, but with limited headroom for failed retries or reruns
 
-- **Gemini Flash** (scripts): ~500 RPD ÷ 1 call/video = **~500 videos/day headroom**
-- **Gemini Flash-Lite** (trends + fact-check): ~1,000 RPD ÷ 2 calls/video = **~500 videos/day headroom**
-- **YouTube uploads**: 10,000 units ÷ 100 units/upload = **100 uploads/day free**
-- **GitHub Actions**: 2,000 min/month ÷ ~3 min/run = **~660 runs/month free**
+For casual testing and manual use, the free tier is fine. For a reliable fully-automated 3-posts/day schedule, connect a billing account. **This does not make it expensive:**
 
-**Practical free ceiling: ~100 videos/day.** The default schedule (3/day) uses less than 1% of the free quota — you'd have to be posting aggressively before any limit becomes relevant.
+### What it costs on a billed account
 
-The one exception: **NASA footage** uses a keyless demo key capped at 50 requests/day. For space-heavy content, [register a free NASA API key](https://api.nasa.gov/) to get 1,000 req/hr.
+With billing enabled, Gemini Tier 1 includes **1,500 free grounding queries/day** — far more than enough. You only pay for token usage:
 
-### What does it cost once you're past the free tier?
-
-If you connect a billing account (required for scheduled/production use with heavier volume), pricing is per token:
-
-| What happens per video | Approx. cost |
+| Per video | Approx. cost |
 |---|---|
 | Trend discovery (flash-lite, grounded) | < $0.01 |
 | Script writing (flash) | < $0.01 |
 | Fact-check (flash-lite, grounded) | < $0.01 |
 | **Total per video** | **~$0.01 – $0.02** |
-| Voiceover, footage, publishing | **$0.00** |
+| Voiceover, footage, YouTube posting | **$0.00** (always free) |
 
-At 3 videos/day that's roughly **$1–2/month** — less than a coffee. YouTube's Data API, Pexels, edge-tts, and NASA all remain free regardless of volume.
+**At 3 videos/day that is roughly $1–2/month.** YouTube's Data API, Pexels, edge-tts, and NASA remain free regardless of posting volume.
 
-> Costs are estimated at published Gemini list prices and will vary with token usage per topic. The bot logs every call to `data/costs.jsonl`; run `python -m socialbot.cli costs` to see a live breakdown.
+> The bot logs every API call to `data/costs.jsonl`. Run `python -m socialbot.cli costs` to see a live breakdown by stage and model.
+
+---
+
+## Customize for your use case
+
+Everything is controlled by your `.env` file. You do not need to touch any code.
+
+### Business / brand channel
+Promote your products, services, or industry. The bot will source relevant news and angle it toward your niche.
+
+```env
+CONTENT_NICHE=sustainable fashion brand, eco-friendly clothing, ethical manufacturing trends
+CONTENT_TONE=confident and brand-forward, speaks to eco-conscious consumers, warm but informative
+CLIP_SECONDS=20
+```
+
+### Local news / community channel
+```env
+CONTENT_NICHE=local government, city council, community events, regional business news
+CONTENT_TONE=neutral local news reporter, factual, community-focused, no sensationalism
+CLIP_SECONDS=30
+```
+
+### Finance / investing
+```env
+CONTENT_NICHE=stock market, crypto, personal finance, economic news, Federal Reserve
+CONTENT_TONE=calm and analytical, data-driven, speaks to retail investors, avoids hype
+CLIP_SECONDS=25
+```
+
+### Fitness / health
+```env
+CONTENT_NICHE=fitness research, nutrition science, sports medicine, workout trends
+CONTENT_TONE=motivating but evidence-based, plain-spoken, practical — no bro-science
+CLIP_SECONDS=20
+```
+
+### Gaming / esports
+```env
+CONTENT_NICHE=video game releases, esports tournaments, gaming industry news, game reviews
+CONTENT_TONE=enthusiastic and casual, speaks to gamers, fast-paced, current slang is fine
+CLIP_SECONDS=20
+```
+
+### Tech / AI (the default)
+```env
+CONTENT_NICHE=AI and emerging technology, space and astronomy, UFOs/UAPs and the search for extraterrestrial life
+CONTENT_TONE=clear, punchy, plain-spoken explainer; smart and factual but neutral — no hype, no jokes
+CLIP_SECONDS=25
+```
+
+### Key parameters
+
+| Variable | What it controls | Example |
+|---|---|---|
+| `CONTENT_NICHE` | What topics Gemini searches for. Be specific — the more concrete, the better the stories. | `"electric vehicles, Tesla, EV charging infrastructure"` |
+| `CONTENT_TONE` | The narrator's personality and speaking style. Shapes every word of the script. | `"upbeat fitness coach, motivating, science-backed"` |
+| `CLIP_SECONDS` | Target video length. 15–30s is the sweet spot for Shorts retention. | `20` |
+| `TTS_VOICES` | Comma-separated pool of Microsoft neural voices. The bot rotates through them. Run `python -m socialbot.cli voices` to list all options. | `"en-US-AndrewMultilingualNeural,en-GB-RyanNeural"` |
+| `YOUTUBE_PRIVACY` | `public`, `unlisted`, or `private`. Set to `private` while testing. | `public` |
+| `SPECULATIVE_KEYWORDS` | Topics that are allowed to post on a `needs_review` fact-check (inherently unverifiable claims). | `"ufo,alien,paranormal"` |
 
 ---
 
@@ -85,9 +142,9 @@ At 3 videos/day that's roughly **$1–2/month** — less than a coffee. YouTube'
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate    # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env        # Windows: copy .env.example .env
+cp .env.example .env         # Windows: copy .env.example .env
 ```
 
 Edit `.env` and fill in the keys below.
@@ -98,15 +155,15 @@ Edit `.env` and fill in the keys below.
 1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and create an API key.
 2. Set `GEMINI_API_KEY=` in `.env`.
 
-For casual use the free tier is enough. For 3+ posts/day on a schedule, connect a billing account — the API key stays the same, billing just enables higher rate limits.
+The free tier works for testing. For a reliable daily schedule, connect a billing account at [console.cloud.google.com](https://console.cloud.google.com) — the same API key works, billing just unlocks higher limits and 1,500 free grounding queries/day.
 
 #### Pexels b-roll (optional, free)
-Without this you get a clean animated gradient background. With it you get real footage:
+Without this key you get an animated gradient background. With it you get real footage:
 1. Create a free account at [pexels.com/api](https://www.pexels.com/api/) and copy your key.
 2. Set `PEXELS_API_KEY=` in `.env`.
 
 #### NASA footage (optional, free)
-Space/astronomy/UAP topics automatically pull from NASA's public-domain library. No key needed, but registering a free key at [api.nasa.gov](https://api.nasa.gov/) raises the rate limit from 50 to 1,000 req/hr.
+Space/astronomy/UAP topics automatically pull from NASA's public-domain library. No key is required, but registering a free key at [api.nasa.gov](https://api.nasa.gov/) raises the rate limit from 50 to 1,000 req/hr — recommended if your niche is space-heavy.
 
 #### YouTube (to publish)
 1. Open [console.cloud.google.com](https://console.cloud.google.com) and create (or reuse) a project.
@@ -114,15 +171,15 @@ Space/astronomy/UAP topics automatically pull from NASA's public-domain library.
 3. **OAuth consent screen:** External. Add yourself as a test user.
 4. **Credentials → Create Credentials → OAuth client ID → Desktop app.**
 5. Download the JSON and save it as `secrets/youtube_client_secret.json`.
-6. Run `python -m socialbot.cli youtube-auth` once to authorize via browser. The token is cached and refreshed automatically after that.
-7. Keep `YOUTUBE_PRIVACY=private` in `.env` while you're testing.
+6. Run `python -m socialbot.cli youtube-auth` once to authorize via browser. The token refreshes automatically after that.
+7. Keep `YOUTUBE_PRIVACY=private` while you're testing.
 
-> **Important:** keep the OAuth app in **Testing** status for personal use. If you publish it to Production, the token is permanent — in Testing it expires after 7 days and you'll need to re-run `youtube-auth`.
+> **OAuth note:** keep the app in **Testing** status for personal use (token is permanent). If you switch to Production, the Testing token expires after 7 days and you'll need to re-run `youtube-auth`.
 
 #### Facebook (optional)
 1. Create a Facebook **Page** if you don't have one.
 2. At [developers.facebook.com](https://developers.facebook.com) create a Business app and add the Graph API.
-3. Use the Graph API Explorer to generate a Page access token with `pages_manage_posts` + `pages_read_engagement`, then exchange it for a **long-lived** token.
+3. Generate a Page access token with `pages_manage_posts` + `pages_read_engagement`, then exchange it for a **long-lived** token.
 4. Set `FACEBOOK_PAGE_ID=` and `FACEBOOK_PAGE_TOKEN=` in `.env`.
 
 ---
@@ -148,11 +205,11 @@ python -m socialbot.cli open <id>    # play the clip
 python -m socialbot.cli approve <id>
 python -m socialbot.cli reject  <id> --reason "off-brand"
 
-# Publish (only works on approved items)
+# Publish approved items
 python -m socialbot.cli publish <id> --targets youtube
 python -m socialbot.cli publish --all-approved
 
-# Fully automated: generate + fact-check + auto-publish in one command
+# Fully automated: generate + fact-check + auto-publish in one shot
 python -m socialbot.cli auto --count 3 --targets youtube
 
 # Cost tracking
@@ -161,16 +218,14 @@ python -m socialbot.cli costs --youtube  # YouTube quota usage
 python -m socialbot.cli costs --json     # machine-readable
 ```
 
-Generated clips live in `data/pending/<id>/`. Each folder contains `meta.json` with the script, fact-check report, generation cost, and publish results.
-
 ---
 
 ## Automated scheduling (GitHub Actions)
 
-The bot runs headless in GitHub Actions — **no server, no always-on machine**. Each run spins up, generates a clip, posts it, and shuts down. The free Actions tier easily covers 3 posts/day.
+The bot runs headless on GitHub's servers — **no server, no always-on machine**. Each run spins up, generates and posts a clip, then shuts down. The free Actions tier covers 3 posts/day easily.
 
 ### Setup
-1. Fork or push this repo to a **private** GitHub repository.
+1. Push this repo to a **private** GitHub repository.
 2. Add these **Secrets** under *Settings → Secrets and variables → Actions*:
 
    | Secret | Value |
@@ -179,43 +234,43 @@ The bot runs headless in GitHub Actions — **no server, no always-on machine**.
    | `PEXELS_API_KEY` | Your Pexels key |
    | `YOUTUBE_TOKEN` | Contents of `secrets/youtube_token.json` after running `youtube-auth` locally |
 
-3. The workflow (`.github/workflows/auto.yml`) runs at **13:00, 18:00, and 23:00 UTC** by default. Edit the cron lines to match your target timezone.
-4. You can also trigger a run manually from the **Actions** tab → **auto-post** → **Run workflow**.
+3. The workflow (`.github/workflows/auto.yml`) fires at **13:00, 18:00, and 23:00 UTC** by default. Edit the `cron` lines to match your timezone.
+4. Trigger a run manually from the **Actions** tab → **auto-post** → **Run workflow** to test.
 
 ### Pausing
-To pause cloud posting, disable the workflow in the repo's Actions tab. A `data/PAUSED` file pauses **local** runs but has no effect on Actions.
+Disable the workflow in the Actions tab. A local `data/PAUSED` file pauses local runs only — it has no effect on the cloud job.
 
 ---
 
-## How the content pipeline works
+## How the pipeline works
 
 ```
 Trend discovery
-  Gemini searches Google for stories trending in the last 24-48h
-  filtered to your CONTENT_NICHE. Returns ~5 topics; picks the
-  freshest ones not covered recently (topic dedup).
+  Gemini + Google Search finds stories trending in the last 24-48 hours,
+  filtered to your CONTENT_NICHE. Returns a batch of topics; picks the
+  freshest ones not covered recently (topic dedup via data/used_topics.json).
 
 Script + hook
-  Gemini writes a ~25s voiceover that leads with the single most
-  surprising fact (scroll-stopper hook), delivers the key details,
-  and ends on a line that loops cleanly into the hook on replay.
+  Gemini writes a ~25s voiceover. The first sentence is the single most
+  surprising fact (scroll-stopper hook). Ends on a line that loops cleanly
+  back into the hook so auto-replays feel seamless.
 
 Fact-check
-  A second grounded call verifies every material claim. Verdict:
-    ok           → publishes automatically
-    needs_review → held (unless the topic is inherently speculative
-                   — UFOs/aliens/UAPs — in which case it publishes)
-    rejected     → never published (actively contradicted by sources)
+  A second grounded Gemini call verifies every material claim:
+    ok           → auto-publishes
+    needs_review → held, unless the topic is inherently speculative
+                   (UFO/alien/UAP) — then it publishes
+    rejected     → never published (claims actively contradicted by sources)
 
 Visuals
   Space/astronomy/UAP topics → NASA public-domain imagery + video
   Everything else             → Pexels stock footage
-  Footage is deduplicated across runs so clips don't reuse the same b-roll.
+  Footage is deduplicated across runs so clips never reuse the same b-roll.
 
 Assembly (ffmpeg, 1080×1920)
   • Hook text burns in big + centered for the first ~2.5s
-  • B-roll cuts every ~3s (algorithm favors fast visual changes)
-  • Word-synced captions (white, burned-in)
+  • B-roll cuts every ~3s (the algorithm favors fast visual changes)
+  • Word-synced captions burned in (white, high-contrast)
   • Voices rotate from a pool so every clip sounds different
 ```
 
@@ -224,6 +279,6 @@ Assembly (ffmpeg, 1080×1920)
 ## Responsible use
 
 - **You are responsible** for what gets posted. The fact-check pass reduces risk but is not a guarantee.
-- Respect YouTube and Facebook automation policies.
-- Pexels footage is licensed for free use with attribution. NASA imagery is public domain.
-- edge-tts voices are used via Microsoft Edge's Read Aloud feature — free for personal use.
+- Respect YouTube and Facebook automation and spam policies.
+- Pexels footage is licensed for free commercial use. NASA imagery is public domain.
+- edge-tts uses Microsoft Edge's Read Aloud feature — free for personal and small-scale use.
