@@ -1,0 +1,71 @@
+name: auto-post
+
+# Runs the bot on a schedule: generate -> fact-check -> auto-publish ok clips.
+# Times are UTC. Adjust the cron lines to your timezone.
+on:
+  schedule:
+    - cron: "0 13 * * *"   # ~3 posts/day, spread out
+    - cron: "0 18 * * *"
+    - cron: "0 23 * * *"
+  workflow_dispatch: {}      # lets you run it manually from the Actions tab
+
+permissions:
+  contents: write            # to persist dedup state back to the repo
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: auto-post
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build .env and restore YouTube token from secrets
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YOUTUBE_TOKEN: ${{ secrets.YOUTUBE_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+          FACEBOOK_PAGE_TOKEN: ${{ secrets.FACEBOOK_PAGE_TOKEN }}
+        run: |
+          mkdir -p secrets
+          printf '%s' "$YOUTUBE_TOKEN" > secrets/youtube_token.json
+          cat > .env <<EOF
+          GEMINI_API_KEY=${GEMINI_API_KEY}
+          GEMINI_MODEL=gemini-2.5-flash
+          GEMINI_CALLS_MODEL=gemini-2.5-flash-lite
+          GEMINI_FALLBACK_MODEL=gemini-2.5-flash-lite
+          PEXELS_API_KEY=${PEXELS_API_KEY}
+          TTS_VOICES=en-US-AndrewMultilingualNeural,en-US-BrianMultilingualNeural,en-US-ChristopherNeural,en-US-EricNeural,en-GB-RyanNeural,en-AU-WilliamNeural
+          CONTENT_NICHE=AI and emerging technology, space and astronomy, UFOs/UAPs and the search for extraterrestrial life
+          CONTENT_TONE=clear, punchy, plain-spoken explainer; smart and factual but neutral - no hype, no jokes
+          CLIP_SECONDS=25
+          YOUTUBE_TOKEN_FILE=secrets/youtube_token.json
+          YOUTUBE_PRIVACY=public
+          FACEBOOK_PAGE_ID=${FACEBOOK_PAGE_ID}
+          FACEBOOK_PAGE_TOKEN=${FACEBOOK_PAGE_TOKEN}
+          EOF
+
+      - name: Generate and auto-publish
+        run: |
+          if [ -n "${{ secrets.FACEBOOK_PAGE_TOKEN }}" ]; then TARGETS="youtube,facebook"; else TARGETS="youtube"; fi
+          python -m socialbot.cli auto --count 1 --targets "$TARGETS"
+
+      - name: Persist uniqueness (dedup) state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/used_broll.json data/used_nasa.json data/last_voice.txt 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "chore: update dedup state [skip ci]"
+          git push || true

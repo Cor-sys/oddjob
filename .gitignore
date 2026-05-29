@@ -1,0 +1,26 @@
+# Secrets & env
+.env
+secrets/
+*.token.json
+youtube_token.json
+
+# Generated media & queue
+data/pending/*
+data/published/*
+data/work/*
+!data/**/.gitkeep
+# control/log files (kept local; never commit)
+data/PAUSED
+data/auto.log
+# NOTE: data/used_*.json and data/last_voice.txt ARE tracked so the cloud job
+# can persist uniqueness (dedup) state between runs.
+
+# Local editor/agent settings
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/

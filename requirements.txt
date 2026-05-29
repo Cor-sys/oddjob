@@ -1,0 +1,22 @@
+# Core
+python-dotenv>=1.0
+
+# Gemini (Google AI Studio) — topic discovery, scripting, fact-check
+google-genai>=1.0
+
+# Free AI voiceover (no API key required)
+edge-tts>=6.1
+
+# HTTP (Pexels b-roll, Facebook Graph API)
+requests>=2.31
+
+# Web review dashboard
+flask>=3.0
+
+# YouTube Data API upload
+google-api-python-client>=2.0
+google-auth-oauthlib>=1.2
+google-auth-httplib2>=0.2
+
+# ffmpeg is used directly via subprocess — install the binary separately
+# (already present on this machine: ffmpeg 8.1)
