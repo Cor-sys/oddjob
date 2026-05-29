@@ -31,12 +31,13 @@ Each video makes **3 Gemini API calls**:
 
 ### Free tier limits (as of May 2026)
 
-Source: [ai.google.dev/gemini-api/docs/rate-limits](https://ai.google.dev/gemini-api/docs/rate-limits) and [ai.google.dev/gemini-api/docs/pricing](https://ai.google.dev/gemini-api/docs/pricing)
+Sources: [ai.google.dev/gemini-api/docs/rate-limits](https://ai.google.dev/gemini-api/docs/rate-limits) · [ai.google.dev/gemini-api/docs/pricing](https://ai.google.dev/gemini-api/docs/pricing)
 
 | Service | Free limit | Notes |
 |---|---|---|
-| **Gemini 2.5 Flash** | 10 RPM · 250,000 TPM · **1,500 RPD** | Used for script writing |
-| **Gemini 2.5 Flash-Lite** | 15 RPM · 250,000 TPM · **1,000 RPD** | Used for trends + fact-check (high-frequency workhorse — low latency, ideal for pipelines) |
+| **Gemini 2.5 Flash** (regular calls) | 10 RPM · **1,500 RPD** | Script writing — not the bottleneck |
+| **Gemini 2.5 Flash-Lite** (regular calls) | 15 RPM · **1,000 RPD** | High-frequency pipeline workhorse — low latency, built for automation |
+| **⚠️ Gemini — grounded calls** | **~20/day on free tier** | Trends + fact-check both use Google Search grounding. **This is the real wall you will hit.** |
 | **Pexels** (b-roll footage) | 200 req/hr · 20,000 req/month | More than enough |
 | **NASA** (space footage, keyless) | 30 req/hr · 50 req/day | Register a free key for 1,000 req/hr |
 | **YouTube Data API v3** | 10,000 quota units/day · ~100 units/upload | ~100 uploads/day free |
@@ -45,27 +46,32 @@ Source: [ai.google.dev/gemini-api/docs/rate-limits](https://ai.google.dev/gemini
 
 > Check your project's active limits at [aistudio.google.com/rate-limit](https://aistudio.google.com/rate-limit).
 
+### Why grounded calls are the real constraint
+
+**Google Search grounding** (what lets the bot search the live web for trends and verify facts) is a separate feature with its own quota on top of the general RPD:
+
+| Tier | Grounding quota |
+|---|---|
+| **Free tier** | ~20 grounded calls/day total across your project |
+| **Billed (Tier 1)** | **1,500 free grounding queries/day**, then $35/1,000 |
+
+This bot uses 2 grounded calls per video. At 3 posts/day that is 6 grounding calls — you burn through the ~20/day free limit quickly once you factor in any testing, reruns, or retries on the same day. This is exactly why switching to a billed account is strongly recommended for daily automation, even though the dollar cost is near zero.
+
 ### The math
 
-Each video uses **3 Gemini calls** (1 Flash + 2 Flash-Lite). At 1,500 RPD per model on the free tier:
-
-| Scenario | Flash calls used | Flash-Lite calls used | % of free daily quota |
+| Scenario | Grounded calls | Regular calls | Free tier OK? |
 |---|---|---|---|
-| 3 videos/day (default) | 3 | 6 | **< 1%** |
-| 50 videos/day | 50 | 100 | ~10% |
-| **Free ceiling** | ~1,500 | ~1,000 | 100% |
+| 3 videos/day (scheduled) | 6 of ~20 free | 3 of 1,000–1,500 free | ⚠️ Yes, but little headroom |
+| 3 videos/day (billed) | 6 of 1,500 free | 3 of 1,000–1,500 free | ✅ < 1% of every quota |
+| **Free ceiling** | ~10 videos/day | ~500 videos/day | — |
 
-**Practical free limit: ~500 videos/day** (Flash-Lite is the binding constraint at 1,000 RPD ÷ 2 calls/video). At the default 3/day you will never come close.
+**The free tier works for occasional testing. For reliable daily automation, enable billing** — the actual cost is negligible:
 
-> Flash-Lite's 1,000 RPD was 1,500 before April 2026 when Google tightened free-tier quotas. Flash remains at 1,500 RPD.
-
-The limit you are more likely to hit in burst use is **RPM (10 requests/minute for Flash)**. If you generate a large batch very quickly — say 15+ videos at once — you may hit the per-minute cap. Spread across separate runs (as the GitHub Actions schedule does), this is never an issue.
-
-For casual testing and normal use the free tier is entirely sufficient. Connecting a billing account primarily unlocks higher RPM ceilings and removes any throttling risk. **It does not change the cost much:**
+> Flash-Lite's general RPD was 1,500 before April 2026 when Google tightened free-tier quotas; it is now 1,000. The grounding quota is separate from and lower than the RPD.
 
 ### What it costs on a billed account
 
-With billing enabled, Gemini Tier 1 includes **1,500 free grounding queries/day** — far more than enough. You only pay for token usage:
+You only pay for token usage — grounding is included free (1,500 queries/day) and everything else is $0:
 
 | Per video | Approx. cost |
 |---|---|
