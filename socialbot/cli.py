@@ -61,6 +61,27 @@ def _cmd_generate(args) -> int:
     return 0
 
 
+def _cmd_promo(args) -> int:
+    from .pipeline import make_promo, publish_promo
+
+    kws = [k.strip() for k in (args.keywords or "").split(",") if k.strip()]
+    tags = [h.strip() for h in (args.hashtags or "").split(",") if h.strip()]
+    item = make_promo(
+        title=args.title, audio=args.audio, say=args.say, image=args.image,
+        video=args.video, keywords=kws, link=args.link, cta=args.cta,
+        description=args.description, hashtags=tags, seconds=args.seconds,
+    )
+    if args.publish:
+        targets = tuple(t.strip() for t in args.targets.split(",") if t.strip())
+        results = publish_promo(item, targets=targets)
+        for plat, r in results.items():
+            print(f"  {plat} -> {r.get('url') or r.get('error')}")
+    else:
+        print(f"\nQueued {item.id}. Preview: python -m socialbot.cli open {item.id}")
+        print(f"Publish when ready: python -m socialbot.cli publish {item.id} --targets youtube")
+    return 0
+
+
 def _status_tag(item) -> str:
     fc = item.meta.get("factcheck", {}).get("verdict", "?")
     return f"{item.status:10s} fc={fc:13s}"
@@ -269,6 +290,23 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--keywords", default=None, metavar="KW1,KW2",
                    help="comma-separated b-roll search keywords for custom topic")
     g.set_defaults(func=_cmd_generate)
+
+    pr = sub.add_parser("promo", help="PROMO: build a post from your own content (song/product/link)")
+    pr.add_argument("--title", required=True, help="overlay text + post title")
+    pr.add_argument("--audio", default=None, help="your audio file (e.g. a song) — used as the soundtrack")
+    pr.add_argument("--say", default=None, help="text for an AI voiceover (use instead of --audio)")
+    pr.add_argument("--image", default=None, help="your cover/product image (Ken Burns pan/zoom)")
+    pr.add_argument("--video", default=None, help="your background video clip")
+    pr.add_argument("--keywords", default=None, metavar="KW1,KW2",
+                    help="stock-footage search terms if no --image/--video given")
+    pr.add_argument("--link", default=None, help="URL for the description (song/product/website)")
+    pr.add_argument("--cta", default=None, help="call-to-action label for the link, e.g. 'Stream now'")
+    pr.add_argument("--description", default=None, help="post description (defaults to the title)")
+    pr.add_argument("--hashtags", default=None, metavar="TAG1,TAG2", help="comma-separated hashtags")
+    pr.add_argument("--seconds", type=int, default=None, help="length cap (default: min(audio, 60))")
+    pr.add_argument("--targets", default="youtube")
+    pr.add_argument("--publish", action="store_true", help="publish now instead of queueing for review")
+    pr.set_defaults(func=_cmd_promo)
 
     ls = sub.add_parser("list", help="list review queue")
     ls.add_argument("--status", default=None)

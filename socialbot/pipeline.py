@@ -1,16 +1,28 @@
-"""Orchestrates: trends -> script -> fact-check -> media -> review queue."""
+"""Orchestrates: trends -> script -> fact-check -> media -> review queue.
+
+Also hosts `make_promo` (promo mode): build a post from your OWN content — a
+song, a product, a website — using your audio/visuals and a clickable link,
+instead of an AI-narrated news clip.
+"""
 from __future__ import annotations
 
 import re
+import shutil
+from pathlib import Path
 
 from . import costs, factcheck, review, topic_history
 from .config import settings
-from .media.assemble import assemble
+from .media import stock
+from .media.assemble import assemble, trim_audio
 from .media.captions import build_ass
 from .media.router import fetch_visuals
-from .media.tts import pick_voice, synthesize
+from .media.tts import _probe_duration, pick_voice, synthesize
 from .script import Script, write_script
 from .trends import Topic, discover
+
+# YouTube Shorts cap; promo audio is trimmed to this unless --seconds overrides.
+_SHORTS_MAX = 60
+_IMAGE_EXT = (".jpg", ".jpeg", ".png", ".webp", ".gif")
 
 
 def generate_from_topic(topic: Topic, *, seconds: int | None = None, build_video: bool = True) -> review.Item:
@@ -202,3 +214,111 @@ def auto_run_custom_topic(topic: Topic, *, targets: tuple[str, ...] = ("youtube"
     except Exception as e:
         print(f"  [auto] publish failed for {it.id}: {e}")
         return []
+
+
+# ── promo mode (your own content: songs, products, links) ─────────────────────
+
+def make_promo(
+    *,
+    title: str,
+    audio: str | None = None,
+    say: str | None = None,
+    image: str | None = None,
+    video: str | None = None,
+    keywords: list[str] | None = None,
+    link: str | None = None,
+    cta: str | None = None,
+    description: str | None = None,
+    hashtags: list[str] | None = None,
+    seconds: int | None = None,
+    build_video: bool = True,
+) -> review.Item:
+    """Build a promo clip from YOUR content (no trends, no fact-check).
+
+    Audio is either your own file (`audio`, e.g. a song) or AI voiceover of
+    `say`. Visuals are your `video`/`image`, else stock from `keywords`, else a
+    gradient. `link`/`cta` become a clickable call-to-action in the description.
+    """
+    if not audio and not say:
+        raise RuntimeError("promo needs either --audio (your file) or --say (AI voiceover text)")
+
+    meta = {
+        "promo": True,
+        "topic_title": title,
+        "on_screen_title": title,
+        "post_description": description or title,
+        "link": link,
+        "cta": cta,
+        "hashtags": [h.lstrip("#").strip() for h in (hashtags or []) if h.strip()],
+        "clip_seconds": seconds or settings.clip_seconds,
+        # No fact-check: promo content is the user's own, not a factual claim.
+        "factcheck": {"verdict": factcheck.OK, "summary": "promo (not fact-checked)"},
+    }
+    item = review.create(meta)
+    if build_video:
+        _render_promo(item, audio=audio, say=say, image=image, video=video,
+                      keywords=keywords or [], seconds=seconds)
+    print(f"  -> promo queued: {item.id}")
+    return item
+
+
+def _render_promo(item: review.Item, *, audio, say, image, video, keywords, seconds) -> None:
+    work = item.dir / "work"
+    work.mkdir(parents=True, exist_ok=True)
+    title = item.meta["on_screen_title"]
+
+    # 1) Audio track: your file (trimmed to Shorts length) or AI voiceover.
+    if audio:
+        src = Path(audio).expanduser()
+        if not src.exists():
+            raise RuntimeError(f"audio file not found: {src}")
+        full = _probe_duration(src) or float(seconds or settings.clip_seconds)
+        cap = float(seconds) if seconds else min(full, _SHORTS_MAX)
+        audio_path = trim_audio(src, item.dir / "audio.m4a", cap)
+        duration, words = cap, []
+        print(f"  -> promo audio: {src.name} ({duration:.1f}s)")
+    else:
+        voice = pick_voice()
+        item.meta["voice"] = voice
+        vo = synthesize(say, item.dir / "voice.mp3", voice=voice)
+        audio_path, duration, words = vo.audio_path, vo.duration, vo.words
+        print(f"  -> promo voiceover ({voice}, {duration:.1f}s)")
+
+    # 2) Visuals: your video/image, else stock from keywords, else gradient.
+    media: list[Path] = []
+    for given in (video, image):
+        if given:
+            p = Path(given).expanduser()
+            if not p.exists():
+                raise RuntimeError(f"media file not found: {p}")
+            media = [p]
+            break
+    if not media and keywords:
+        media = stock.fetch_broll(keywords, work / "pexels", 6)
+
+    # 3) Title overlay: persistent for a song (no captions), normal hook for voiceover.
+    if words:
+        ass = build_ass(words, item.dir / "captions.ass", hook=title)
+    else:
+        ass = build_ass([], item.dir / "captions.ass", title=title, title_seconds=duration)
+
+    clip = assemble(
+        audio_path=audio_path, ass_path=ass, broll_paths=media,
+        out_path=item.dir / "clip.mp4", duration=duration, work_dir=work,
+    )
+    item.meta["clip"] = clip.name
+    item.meta["duration"] = round(duration, 2)
+    item.save()
+
+
+def publish_promo(item: review.Item, *, targets: tuple[str, ...] = ("youtube",)) -> dict:
+    """Approve and publish a promo item immediately (no review gate, no fact-check)."""
+    from .publish import publish_item
+
+    if not item.clip_path:
+        print(f"  [promo] {item.id}: no clip rendered — not publishing")
+        return {}
+    review.approve(item.id)
+    fresh = review.get(item.id)
+    print(f"  [promo] publishing {item.id} -> {targets}")
+    return publish_item(fresh, targets=targets)

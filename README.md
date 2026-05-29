@@ -210,6 +210,56 @@ Custom topics skip trend discovery (saves 1 API call) and are published even if 
 
 > **Note:** Custom `--topic` + `--facts` are for automation only, not for storing in your `.env`. Set `CONTENT_NICHE` and `CONTENT_TONE` in `.env` for your channel's ongoing focus.
 
+### Promote your own content — songs, products, links (`promo`)
+
+The `promo` command builds a post from **your own media** — your song, your product shot, your video — with a **clickable link** in the description. No trend discovery, no fact-check, no AI narration unless you want it. Perfect for music releases, product launches, or driving traffic to a website.
+
+```bash
+# Promote a SONG: your audio + a cover image + a streaming link
+python -m socialbot.cli promo \
+  --title "Midnight — out now" \
+  --audio ~/music/midnight.mp3 \
+  --image ~/art/cover.jpg \
+  --link "https://open.spotify.com/track/XXXX" --cta "Stream now" \
+  --hashtags "newmusic,indie,spotify" \
+  --publish
+
+# Promote a PRODUCT: AI voiceover + your product clip + a shop link
+python -m socialbot.cli promo \
+  --title "Meet the Model X" \
+  --say "The Model X launches today. Ten-hour battery, waterproof, and AI-powered." \
+  --video ~/clips/modelx.mp4 \
+  --link "https://shop.example.com/model-x" --cta "Shop now" \
+  --publish
+
+# Promote a WEBSITE / link: AI voiceover + stock footage + a link
+python -m socialbot.cli promo \
+  --title "We just launched!" \
+  --say "Our new platform is live. Sign up free today." \
+  --keywords "startup,technology,website" \
+  --link "https://example.com" --cta "Visit the site"
+```
+
+How it works:
+- **Audio:** `--audio FILE` uses your own track as the soundtrack (trimmed to 60s with a fade-out). Or `--say "TEXT"` generates an AI voiceover instead.
+- **Visuals:** `--video FILE` or `--image FILE` (Ken Burns pan/zoom) uses your media. Otherwise `--keywords` pulls stock footage, or you get an animated gradient.
+- **Link + CTA:** `--link URL` and `--cta "label"` add a clickable call-to-action line to the description (works on every platform).
+- **Length:** `--seconds N` caps it; songs default to `min(track length, 60)`.
+- Drop `--publish` to queue it for review instead of posting immediately.
+
+| Flag | Purpose |
+|---|---|
+| `--title` | On-screen overlay + post title (required) |
+| `--audio` | Your audio/song file (soundtrack, no AI voiceover) |
+| `--say` | Text for an AI voiceover (use instead of `--audio`) |
+| `--image` / `--video` | Your cover/product visual |
+| `--keywords` | Stock footage terms if you don't supply your own visual |
+| `--link` / `--cta` | Clickable URL + its label in the description |
+| `--description` | Post body text (defaults to the title) |
+| `--hashtags` | Comma-separated tags |
+| `--seconds` | Length cap (default: `min(audio, 60)`) |
+| `--publish` | Post now instead of queueing |
+
 ### Review queue (for `generate` mode)
 
 ```bash

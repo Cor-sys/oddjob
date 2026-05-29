@@ -7,12 +7,22 @@ TARGETS = ("youtube", "facebook")
 
 
 def _title_and_description(item: review.Item) -> tuple[str, str, list[str]]:
-    script = item.meta.get("script", {})
-    title = item.meta.get("on_screen_title") or item.meta.get("topic_title") or "Short"
-    hashtags = script.get("hashtags", [])
-    desc = script.get("description", "")
+    meta = item.meta
+    script = meta.get("script", {})
+    title = meta.get("on_screen_title") or meta.get("topic_title") or "Short"
+    # Promo posts carry their own hashtags/description on meta; normal videos
+    # use the AI-written script fields.
+    hashtags = meta.get("hashtags") or script.get("hashtags", [])
+    desc = meta.get("post_description") or script.get("description", "")
+    # Optional call-to-action + link (songs, products, websites). The link is
+    # written on its own line so it stays clickable in the post description.
+    cta, link = meta.get("cta"), meta.get("link")
+    if link:
+        desc = f"{desc}\n\n{(cta + ': ') if cta else ''}{link}".strip()
+    elif cta:
+        desc = f"{desc}\n\n{cta}".strip()
     if hashtags:
-        desc = f"{desc}\n\n" + " ".join(f"#{h}" for h in hashtags)
+        desc = f"{desc}\n\n" + " ".join(f"#{h.lstrip('#')}" for h in hashtags)
     return title, desc.strip(), hashtags
 
 
