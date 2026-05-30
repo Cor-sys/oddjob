@@ -175,13 +175,14 @@ Space, astronomy, and UAP topics automatically pull from NASA's public-domain im
 1. Open [console.cloud.google.com](https://console.cloud.google.com) and create (or reuse) a project.
 2. **APIs & Services → Enable APIs → YouTube Data API v3 → Enable.**
 3. **OAuth consent screen → External.** Add yourself as a test user.
-4. **Credentials → Create Credentials → OAuth client ID → Desktop app.**
-5. Download the JSON and save it as `secrets/youtube_client_secret.json`.
-6. Run `python -m socialbot.cli youtube-auth` once to open a browser login. The token is saved and auto-refreshed after that.
-7. Set `YOUTUBE_PRIVACY=private` in `.env` while testing.
+4. **Publish the app:** on the OAuth consent screen, click **"Publish app"** to move it from *Testing* to *In production*. Accept the "unverified app" notice — it's fine for your own use. (See the warning below for why this matters.)
+5. **Credentials → Create Credentials → OAuth client ID → Desktop app.**
+6. Download the JSON and save it as `secrets/youtube_client_secret.json`.
+7. Run `python -m socialbot.cli youtube-auth` once to open a browser login. The token is saved and refreshed automatically after that.
+8. Set `YOUTUBE_PRIVACY=private` in `.env` while testing.
 
 > [!IMPORTANT]
-> **Keep the OAuth app in Testing status** for personal use — its token is permanent that way. If you switch it to Production, the token expires after **7 days** and the schedule silently stops until you re-run `youtube-auth`. This is the #1 thing that quietly breaks an otherwise-working bot.
+> **Publish your OAuth app to "In production" — this is mandatory for a headless bot.** While the consent screen sits in **Testing** status, Google **expires the refresh token after 7 days** and your schedule silently stops posting. In **production** the token is long-lived. To fix or prevent it: Google Cloud Console → APIs & Services → OAuth consent screen → **Publish app**, then re-run `python -m socialbot.cli youtube-auth` to mint a fresh long-lived token (and update the `YOUTUBE_TOKEN` GitHub secret with the new token). This is the #1 thing that quietly kills an otherwise-working bot.
 
 #### Facebook (optional)
 1. Create a Facebook **Page**.
