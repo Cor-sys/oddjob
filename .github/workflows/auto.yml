@@ -57,8 +57,6 @@ jobs:
           TTS_VOICES:              ${{ vars.TTS_VOICES          || 'en-US-AndrewMultilingualNeural,en-US-BrianMultilingualNeural,en-US-ChristopherNeural,en-US-EricNeural,en-GB-RyanNeural,en-AU-WilliamNeural' }}
           SPECULATIVE_KEYWORDS:    ${{ vars.SPECULATIVE_KEYWORDS || 'ufo,ufos,uap,uaps,alien,aliens,extraterrestrial,flying saucer,close encounter,abduction,roswell,paranormal,cryptid' }}
           YOUTUBE_PRIVACY:         ${{ vars.YOUTUBE_PRIVACY     || 'public' }}
-          SUBSCRIBE_URL:           ${{ vars.SUBSCRIBE_URL }}
-          SUBSCRIBE_CTA:           ${{ vars.SUBSCRIBE_CTA       || 'Subscribe for more' }}
         run: |
           mkdir -p secrets
           printf '%s' "$YOUTUBE_TOKEN" > secrets/youtube_token.json
@@ -75,8 +73,6 @@ jobs:
           SPECULATIVE_KEYWORDS=${SPECULATIVE_KEYWORDS}
           YOUTUBE_TOKEN_FILE=secrets/youtube_token.json
           YOUTUBE_PRIVACY=${YOUTUBE_PRIVACY}
-          SUBSCRIBE_URL=${SUBSCRIBE_URL}
-          SUBSCRIBE_CTA=${SUBSCRIBE_CTA}
           FACEBOOK_PAGE_ID=${FACEBOOK_PAGE_ID}
           FACEBOOK_PAGE_TOKEN=${FACEBOOK_PAGE_TOKEN}
           EOF

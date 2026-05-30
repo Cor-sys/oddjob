@@ -321,8 +321,6 @@ Everything is driven by environment variables — **no code changes required.** 
 | `YOUTUBE_PRIVACY` | `public`, `unlisted`, or `private` | `private` |
 | `SPECULATIVE_KEYWORDS` | Topics allowed to auto-publish on a `needs_review` fact-check (inherently unverifiable claims). Comma-separated. | ufo, alien, paranormal, ... |
 | `POSTS_PER_RUN` | Clips generated per scheduled run (GitHub Actions). | `2` |
-| `SUBSCRIBE_URL` | A channel link auto-appended to every post as a subscribe CTA. Use your channel-ID URL (`youtube.com/channel/UC...`) so it survives `@handle` changes. Blank = off. | _(blank)_ |
-| `SUBSCRIBE_CTA` | The label shown before the subscribe link. | `Subscribe for more` |
 
 ### Preset configurations
 
@@ -424,8 +422,6 @@ The bot runs on GitHub's servers — **no server, no always-on machine**. Each r
    | `YOUTUBE_PRIVACY` | `public` / `unlisted` / `private` | `public` |
    | `SPECULATIVE_KEYWORDS` | Topics that bypass strict fact-check | ufo, alien, paranormal, ... |
    | `POSTS_PER_RUN` | Clips per scheduled run | `2` |
-   | `SUBSCRIBE_URL` | Channel link auto-added to every post (use the `/channel/UC...` form) | _(blank = off)_ |
-   | `SUBSCRIBE_CTA` | Label before the subscribe link | `Subscribe for more` |
 
 3. **Schedule:** the workflow fires at **13:00, 18:00, and 23:00 UTC** by default. Edit the three `cron:` lines in `.github/workflows/auto.yml` for your timezone. [UTC converter →](https://www.timeanddate.com/worldclock/converter.html)
 
