@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <strong>▶️ See it running live:</strong> <a href="https://www.youtube.com/channel/UCXnzkKf4qdGl1cGcmW6ZqoQ">@VoidRunnerAImax</a> — every video on this channel was generated, fact-checked, and posted entirely by Oddjob.
+  <strong>▶️ See it running live:</strong> <a href="https://www.youtube.com/channel/UCXnzkKf4qdGl1cGcmW6ZqoQ">@OddJobbot</a> — every video on this channel was generated, fact-checked, and posted entirely by Oddjob.
 </p>
 
 ---
