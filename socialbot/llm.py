@@ -41,6 +41,39 @@ def _model_chain(primary: str) -> list[str]:
     return chain
 
 
+def _empty_reason(resp: Any) -> str:
+    """Best-effort explanation for why ``resp.text`` came back blank — finish
+    reason, a safety block, or no candidates at all. Used only for diagnostics
+    so an 'empty response' tells us *why*. Never raises."""
+    bits: list[str] = []
+    try:
+        block = getattr(getattr(resp, "prompt_feedback", None), "block_reason", None)
+        if block:
+            bits.append(f"prompt_blocked={getattr(block, 'name', block)}")
+    except Exception:
+        pass
+    try:
+        cands = resp.candidates or []
+        if not cands:
+            bits.append("no_candidates")
+        for c in cands[:1]:
+            fr = getattr(c, "finish_reason", None)
+            if fr is not None:
+                bits.append(f"finish_reason={getattr(fr, 'name', fr)}")
+            blocked = [
+                getattr(getattr(r, "category", None), "name", str(getattr(r, "category", "?")))
+                for r in (getattr(c, "safety_ratings", None) or [])
+                if getattr(r, "blocked", False)
+            ]
+            if blocked:
+                bits.append(f"blocked_safety={','.join(blocked)}")
+            parts = getattr(getattr(c, "content", None), "parts", None) or []
+            bits.append(f"parts={len(parts)}")
+    except Exception:
+        pass
+    return ", ".join(bits) or "no detail available"
+
+
 def _generate(contents: str, config: types.GenerateContentConfig, *, model: str | None = None):
     """Generate content with resilience to free-tier flakiness.
 
@@ -75,7 +108,7 @@ def _generate(contents: str, config: types.GenerateContentConfig, *, model: str 
                     from . import costs
                     costs.record_llm(model, resp)
                     return resp
-                last_err = ValueError("empty response from model")
+                last_err = ValueError(f"empty response [{_empty_reason(resp)}]")
             if attempt < _MAX_TRIES - 1:
                 time.sleep(_BACKOFF[attempt])  # wait out the per-minute limit
 
