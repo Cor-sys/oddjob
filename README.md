@@ -6,7 +6,17 @@
 
 <p align="center"><em>Your silent henchman for short-form content — he handles all the odd jobs.</em></p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License">
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/cost-free%20to%20start-brightgreen" alt="Free to start">
+  <img src="https://img.shields.io/badge/runs-100%25%20in%20the%20cloud-orange" alt="Runs in the cloud">
+</p>
+
 ---
+
+> [!TIP]
+> **Not technical? Don't want to read all this?** Copy the file **[`setup-assistant.json`](setup-assistant.json)**, paste it into any AI chat (ChatGPT, Claude, Gemini), and say *"Walk me through setting up Oddjob step by step."* It will guide you through everything below, one step at a time, matched to your computer.
 
 **Oddjob** is an automated short-form video bot that runs **entirely in the cloud** and is **free to start**. It finds trending stories (or uses topics you provide), writes a punchy script, fact-checks it, renders a voiced and captioned 9:16 clip, and posts it to **YouTube** automatically on a schedule — no server, no manual work. It also does **promos**: turn your own song, product, or link into a post with one command.
 
@@ -47,6 +57,7 @@ The Gemini API is the only service that has a meaningful free limit. Everything 
 | Gemini 2.5 Flash-Lite | 10 | **20** | Trend discovery + fact-check (2 calls/video) |
 | Google Search grounding | — | **500** | Separate quota for the live-web search tool |
 
+> [!NOTE]
 > Always verify your own project's limits at [aistudio.google.com/rate-limit](https://aistudio.google.com/rate-limit) — Google adjusts these without notice.
 
 ---
@@ -169,7 +180,8 @@ Space, astronomy, and UAP topics automatically pull from NASA's public-domain im
 6. Run `python -m socialbot.cli youtube-auth` once to open a browser login. The token is saved and auto-refreshed after that.
 7. Set `YOUTUBE_PRIVACY=private` in `.env` while testing.
 
-> **Keep the OAuth app in Testing status** for personal use. In Testing, tokens are permanent. If you publish to Production, the token expires after 7 days and you'll need to re-run `youtube-auth`.
+> [!IMPORTANT]
+> **Keep the OAuth app in Testing status** for personal use — its token is permanent that way. If you switch it to Production, the token expires after **7 days** and the schedule silently stops until you re-run `youtube-auth`. This is the #1 thing that quietly breaks an otherwise-working bot.
 
 #### Facebook (optional)
 1. Create a Facebook **Page**.
@@ -382,6 +394,9 @@ CONTENT_TONE=presentador de noticias claro y directo, sin sensacionalismo
 
 The bot runs on GitHub's servers — **no server, no always-on machine**. Each run spins up, generates and posts clips, then shuts down. The free Actions tier handles 3 runs/day easily (~9 min/day vs the 2,000 min/month free allowance).
 
+> [!WARNING]
+> Keep your repo **private** and **never commit your `.env` or `secrets/` folder** (both are git-ignored by default). Your API keys and YouTube token go in GitHub **Secrets**, never in the code.
+
 ### Setup
 
 1. Push this repo to a **private** GitHub repository.
@@ -465,7 +480,10 @@ Assembly (ffmpeg · 1080 × 1920)
 
 ## Responsible use
 
-- **You are responsible** for what gets posted. The fact-check pass reduces risk but is not a guarantee — review the output if accuracy matters.
+> [!CAUTION]
+> **You are responsible** for what gets posted. The fact-check pass reduces risk but is not a guarantee — review the output if accuracy matters, especially before letting it auto-publish publicly.
+
+- The fact-check gate holds unverifiable or contradicted claims, but always sanity-check a new niche's output before going public.
 - Respect YouTube and Facebook automation policies.
 - Pexels footage is licensed for free commercial use. NASA imagery is public domain.
 - edge-tts uses Microsoft Edge's Read Aloud feature — suitable for personal and small-scale automated use.
