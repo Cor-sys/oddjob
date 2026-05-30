@@ -1,0 +1,143 @@
+{
+  "_README_FOR_HUMANS": "Nervous about the setup? Copy this ENTIRE file, paste it into any AI chat (ChatGPT, Claude, Gemini, Copilot), and send the message: 'Walk me through setting up Oddjob step by step.' The AI will use the instructions below to guide you start to finish.",
+
+  "_instructions_for_ai": "You are an onboarding assistant for a tool called 'Oddjob'. A non-technical user has pasted this file to get help setting it up and using it. Your job: (1) Greet them and ask what operating system they use (Windows, Mac, or Linux) and what they want to do first (try it locally, or set up the automatic cloud schedule). (2) Walk through the steps in 'setup_steps' ONE AT A TIME, in order. After each step, ask them to confirm it worked (use the 'verify' field) before moving on. (3) Explain every step in plain language — assume they have never used a terminal. Give them the exact command to copy, matched to their OS. (4) When they need an API key, use 'api_keys' to tell them exactly where to click. (5) Once set up, use 'commands' and 'presets' to show them how to make their first video. (6) If they hit an error, check 'troubleshooting' first. (7) Never skip steps or assume prior knowledge. Be encouraging and concise.",
+
+  "project": {
+    "name": "Oddjob",
+    "tagline": "Your silent henchman for short-form content — he handles all the odd jobs.",
+    "what_it_does": "An automated bot that creates and posts short vertical videos (YouTube Shorts style). It can (a) find trending news in your chosen topic, write a script, fact-check it, add an AI voiceover + captions + footage, and auto-post it; and (b) 'promo mode' — turn YOUR own song, product, or link into a post. It runs free on a schedule in the cloud via GitHub Actions (no server needed).",
+    "repo": "https://github.com/Cor-sys/oddjob",
+    "good_to_know": "The only thing that can cost money is the Google Gemini API, and only past its free tier. At the default 3 posts/day it is free or a few cents/month. YouTube posting, the voiceover, and the footage are always free."
+  },
+
+  "what_you_need": {
+    "accounts": [
+      {"name": "Google AI Studio (Gemini)", "required": true, "free": true, "for": "writing scripts + fact-checking", "url": "https://aistudio.google.com/apikey"},
+      {"name": "Google Cloud + YouTube", "required": true, "free": true, "for": "uploading videos to YouTube", "url": "https://console.cloud.google.com"},
+      {"name": "Pexels", "required": false, "free": true, "for": "stock footage (without it you get a colored gradient background)", "url": "https://www.pexels.com/api/"},
+      {"name": "NASA", "required": false, "free": true, "for": "space/UFO footage; works keyless but a free key raises limits", "url": "https://api.nasa.gov/"},
+      {"name": "GitHub", "required": "only for the automatic cloud schedule", "free": true, "for": "running the bot on a timer with no computer on", "url": "https://github.com"}
+    ],
+    "software": [
+      {"name": "Python 3.11 or newer", "check": "python --version", "url": "https://www.python.org/downloads/"},
+      {"name": "ffmpeg", "check": "ffmpeg -version", "note": "video assembler; install separately", "url": "https://ffmpeg.org/download.html"},
+      {"name": "Git (to download the project)", "url": "https://git-scm.com/downloads"}
+    ]
+  },
+
+  "setup_steps": [
+    {"step": 1, "title": "Install the prerequisites", "what": "Install Python 3.11+, ffmpeg, and Git from the links in what_you_need.software.", "verify": "Run 'python --version' and 'ffmpeg -version' in a terminal — both should print a version, not an error."},
+    {"step": 2, "title": "Download Oddjob", "how": {"all": "git clone https://github.com/Cor-sys/oddjob.git && cd oddjob"}, "verify": "You are now inside a folder with a README.md and a 'socialbot' folder."},
+    {"step": 3, "title": "Create a virtual environment and install dependencies", "how": {"windows": "python -m venv .venv; .venv\\Scripts\\activate; pip install -r requirements.txt", "mac_linux": "python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt"}, "verify": "pip install finishes without red errors."},
+    {"step": 4, "title": "Create your settings file", "how": {"windows": "copy .env.example .env", "mac_linux": "cp .env.example .env"}, "what": "Open the new .env file in a text editor — you'll paste keys into it in the next steps.", "verify": "A file named .env exists in the folder."},
+    {"step": 5, "title": "Add your Gemini key", "what": "Get a key from Google AI Studio (see api_keys.gemini) and put it in .env after GEMINI_API_KEY=", "verify": "The .env line reads GEMINI_API_KEY=AQ... (your actual key)."},
+    {"step": 6, "title": "(Optional) Add a Pexels key", "what": "For real stock footage. See api_keys.pexels. Put it after PEXELS_API_KEY=. Skip to use a gradient background instead.", "verify": "Optional — fine to leave blank."},
+    {"step": 7, "title": "Set up YouTube uploading", "what": "Follow api_keys.youtube exactly — it has its own click-by-click sub-steps. Then run the one-time login.", "how": {"all": "python -m socialbot.cli youtube-auth"}, "verify": "A browser opens; after you approve, the terminal says the token was saved."},
+    {"step": 8, "title": "Pick your topic and style", "what": "In .env, set CONTENT_NICHE (what topics to cover) and CONTENT_TONE (the narrator's vibe). See 'presets' for copy-paste examples.", "verify": "CONTENT_NICHE in .env describes your channel."},
+    {"step": 9, "title": "Make your first test video (no posting)", "how": {"all": "python -m socialbot.cli generate --count 1"}, "what": "This finds a topic, writes + fact-checks a script, and renders one video into the review queue WITHOUT posting it.", "verify": "Terminal prints 'queued for review' with an id."},
+    {"step": 10, "title": "Watch your test video", "how": {"all": "python -m socialbot.cli list   (then)   python -m socialbot.cli open <the-id>"}, "verify": "The clip plays in your video player."},
+    {"step": 11, "title": "Post it (when you're happy)", "what": "Keep YOUTUBE_PRIVACY=private in .env while testing. Approve then publish.", "how": {"all": "python -m socialbot.cli approve <id> && python -m socialbot.cli publish <id> --targets youtube"}, "verify": "Terminal prints a youtu.be link."},
+    {"step": 12, "title": "(Optional) Automate it in the cloud", "what": "Follow 'deploy_github_actions' to run Oddjob on a schedule with no computer on.", "verify": "A manual run from the GitHub Actions tab succeeds."}
+  ],
+
+  "api_keys": {
+    "gemini": {"steps": ["Go to https://aistudio.google.com/apikey", "Click 'Create API key'", "Copy the key", "Paste it in .env after GEMINI_API_KEY="], "free_note": "Free tier is enough for testing and ~3 posts/day. For heavier use, attach billing in Google Cloud — same key, just higher limits."},
+    "pexels": {"steps": ["Make a free account at https://www.pexels.com/api/", "Copy your API key", "Paste it in .env after PEXELS_API_KEY="]},
+    "youtube": {"steps": ["Open https://console.cloud.google.com and create or pick a project", "APIs & Services -> Enable APIs -> search 'YouTube Data API v3' -> Enable", "OAuth consent screen -> choose External -> add your own email as a Test user", "Credentials -> Create Credentials -> OAuth client ID -> Application type: Desktop app", "Download the JSON file and save it as secrets/youtube_client_secret.json inside the Oddjob folder", "Run: python -m socialbot.cli youtube-auth  (a browser opens; approve it)"], "important": "Keep the OAuth app in 'Testing' status for personal use — its token never expires that way. If you ever publish it to 'Production', the token expires after 7 days and you re-run youtube-auth."},
+    "nasa": {"steps": ["Optional. Works with no key (50 requests/day).", "For more, register free at https://api.nasa.gov/ and the bot picks it up."]},
+    "facebook": {"optional": true, "steps": ["Create a Facebook Page", "At https://developers.facebook.com create a Business app, add Graph API", "Generate a Page access token with pages_manage_posts + pages_read_engagement, exchange it for a long-lived token", "Put FACEBOOK_PAGE_ID and FACEBOOK_PAGE_TOKEN in .env"]}
+  },
+
+  "commands": {
+    "_prefix": "Always run inside the project folder with the virtual environment active.",
+    "list_voices": {"cmd": "python -m socialbot.cli voices", "does": "Lists 200+ AI voices you can put in TTS_VOICES."},
+    "preview_trends": {"cmd": "python -m socialbot.cli trends --count 5", "does": "Shows what's trending in your niche without making a video (uses 1 API call)."},
+    "make_video": {"cmd": "python -m socialbot.cli generate --count 1", "does": "Find topic -> script -> fact-check -> render to the review queue (does NOT post)."},
+    "custom_topic": {"cmd": "python -m socialbot.cli generate --topic \"Your Title\" --facts \"the key facts\" --keywords \"word1,word2\"", "does": "Make a video about YOUR topic instead of trending news."},
+    "auto_post": {"cmd": "python -m socialbot.cli auto --count 2 --targets youtube", "does": "Fully automatic: generate + fact-check + post. Used by the cloud schedule."},
+    "promo": {"cmd": "python -m socialbot.cli promo --title \"My Song\" --audio song.mp3 --image cover.jpg --link \"https://...\" --cta \"Stream now\" --publish", "does": "Turn your OWN song/product/link into a post. See 'promo_mode'."},
+    "review_queue": {"cmd": "python -m socialbot.cli list   |   show <id>   |   open <id>   |   approve <id>   |   reject <id>", "does": "Browse, preview, and decide on queued videos."},
+    "publish": {"cmd": "python -m socialbot.cli publish <id> --targets youtube", "does": "Post an approved video."},
+    "costs": {"cmd": "python -m socialbot.cli costs", "does": "Show how much you've spent (free tier = $0)."},
+    "dashboard": {"cmd": "python -m socialbot.cli serve", "does": "Open a web page to review/approve videos with buttons instead of commands."}
+  },
+
+  "promo_mode": {
+    "what": "Promote your own content with a clickable link. No trends, no fact-check.",
+    "audio": "--audio yoursong.mp3 uses your track (trimmed to 60s with a fade-out). OR --say \"text\" makes an AI voiceover instead.",
+    "visuals": "--video clip.mp4 or --image cover.jpg uses your media. Otherwise --keywords \"a,b\" pulls stock footage, or you get a gradient.",
+    "link": "--link URL and --cta \"label\" add a clickable call-to-action to the description.",
+    "examples": {
+      "song": "python -m socialbot.cli promo --title \"Midnight - out now\" --audio midnight.mp3 --image cover.jpg --link \"https://open.spotify.com/track/XXXX\" --cta \"Stream now\" --hashtags \"newmusic,indie\" --publish",
+      "product": "python -m socialbot.cli promo --title \"Meet Model X\" --say \"Launches today. 10-hour battery, waterproof.\" --video modelx.mp4 --link \"https://shop.example.com\" --cta \"Shop now\" --publish",
+      "website": "python -m socialbot.cli promo --title \"We launched!\" --say \"Sign up free today.\" --keywords \"startup,technology\" --link \"https://example.com\" --cta \"Visit\""
+    }
+  },
+
+  "config": {
+    "where": "Edit these in .env for local use, OR set them as GitHub Variables for the cloud schedule.",
+    "CONTENT_NICHE": "Topics to cover. Be specific. e.g. 'electric vehicles, Tesla, EV charging'.",
+    "CONTENT_TONE": "Narrator personality. e.g. 'calm analytical investor voice, no hype'.",
+    "CLIP_SECONDS": "Video length. 15-30 is best for Shorts. Default 25.",
+    "TTS_VOICES": "Comma-separated voices to rotate through. Run the voices command to list them.",
+    "YOUTUBE_PRIVACY": "public, unlisted, or private. Use private while testing.",
+    "SPECULATIVE_KEYWORDS": "Topics allowed to post even when unverifiable (e.g. ufo,alien). Others need a clean fact-check.",
+    "POSTS_PER_RUN": "How many clips per scheduled run (cloud). Default 2."
+  },
+
+  "presets": {
+    "tech_ai": {"CONTENT_NICHE": "AI and emerging technology, space and astronomy, UFOs/UAPs", "CONTENT_TONE": "clear, punchy, plain-spoken explainer; neutral, no hype", "CLIP_SECONDS": 25},
+    "business": {"CONTENT_NICHE": "your industry news + trends", "CONTENT_TONE": "confident brand voice, informative not salesy", "CLIP_SECONDS": 20},
+    "finance": {"CONTENT_NICHE": "stock market, crypto, personal finance, Fed news", "CONTENT_TONE": "calm, analytical, data-driven, no hype", "CLIP_SECONDS": 25},
+    "fitness": {"CONTENT_NICHE": "fitness research, nutrition science, workout trends", "CONTENT_TONE": "motivating but evidence-based, no miracle claims", "CLIP_SECONDS": 20},
+    "gaming": {"CONTENT_NICHE": "game releases, esports, gaming industry news", "CONTENT_TONE": "enthusiastic, casual, fast-paced", "CLIP_SECONDS": 20},
+    "true_crime": {"CONTENT_NICHE": "unsolved crimes, cold cases, forensic breakthroughs", "CONTENT_TONE": "serious, measured, respectful, no speculation", "CLIP_SECONDS": 30}
+  },
+
+  "deploy_github_actions": {
+    "what": "Runs Oddjob automatically on a schedule using GitHub's free servers. No computer needs to be on.",
+    "steps": [
+      "Push the project to a PRIVATE GitHub repository.",
+      "In the repo: Settings -> Secrets and variables -> Actions.",
+      "Add SECRETS (encrypted): GEMINI_API_KEY, PEXELS_API_KEY (optional), and YOUTUBE_TOKEN (paste the full contents of secrets/youtube_token.json that youtube-auth created).",
+      "Add VARIABLES (plain config you can change anytime): CONTENT_NICHE, CONTENT_TONE, CLIP_SECONDS, TTS_VOICES, YOUTUBE_PRIVACY, POSTS_PER_RUN.",
+      "The schedule (.github/workflows/auto.yml) runs at 13:00, 18:00, 23:00 UTC. Edit the cron lines for your timezone.",
+      "Test it: Actions tab -> auto-post -> Run workflow."
+    ],
+    "pause": "To pause the cloud schedule, disable the workflow in the Actions tab.",
+    "keep_private": "Keep the repo PRIVATE — never commit your .env or secrets/ folder (they are git-ignored by default)."
+  },
+
+  "free_tier": {
+    "verified_limits": {"gemini_2.5_flash": "5 requests/min, 20 requests/day", "gemini_2.5_flash_lite": "10 requests/min, 20 requests/day", "search_grounding": "500/day (separate)", "youtube_uploads": "100/day", "edge_tts_voiceover": "unlimited", "pexels": "200/hr, 20,000/month"},
+    "per_video_calls": "3 (1 Flash for the script, 2 Flash-Lite for trends + fact-check). Promo mode with --audio uses fewer.",
+    "free_ceiling": "About 17-19 videos/day before the 20/day Gemini limit is reached.",
+    "note": "Check your own limits at https://aistudio.google.com/rate-limit . Google changes them occasionally."
+  },
+
+  "costs": {
+    "free_tier": "$0",
+    "billed_per_video": "about $0.003 to $0.013 (Gemini tokens only)",
+    "billed_monthly_examples": {"4_per_day": "~$0.50/month", "17_per_day_max": "~$3/month"},
+    "always_free": "YouTube uploading, AI voiceover, Pexels footage, NASA footage."
+  },
+
+  "troubleshooting": [
+    {"symptom": "'GEMINI_API_KEY is not set'", "fix": "You skipped step 5. Open .env and paste your key after GEMINI_API_KEY=."},
+    {"symptom": "'ffmpeg' not found / video won't render", "fix": "ffmpeg isn't installed or not on your PATH. Reinstall it (what_you_need.software) and confirm 'ffmpeg -version' works."},
+    {"symptom": "A run posts 0 videos", "fix": "The fact-checker held the topic (unverifiable or contradicted). Normal occasionally. Generating 2/run gives a buffer."},
+    {"symptom": "Gemini calls fail after a few videos", "fix": "You hit the free 20/day limit. Wait for the daily reset (midnight Pacific) or attach billing for higher limits."},
+    {"symptom": "YouTube stops working after ~7 days", "fix": "Your OAuth app is in 'Production' — keep it in 'Testing' status, then re-run youtube-auth (see api_keys.youtube.important)."},
+    {"symptom": "Footage looks off-topic", "fix": "Make CONTENT_NICHE and your keywords more specific and concrete."}
+  ],
+
+  "first_run_checklist": [
+    "python --version shows 3.11+",
+    "ffmpeg -version works",
+    ".env has your GEMINI_API_KEY",
+    "youtube-auth completed (a token was saved)",
+    "generate --count 1 produced a clip you watched",
+    "YOUTUBE_PRIVACY=private while testing"
+  ]
+}
