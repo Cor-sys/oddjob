@@ -83,9 +83,7 @@
     "TTS_VOICES": "Comma-separated voices to rotate through. Run the voices command to list them.",
     "YOUTUBE_PRIVACY": "public, unlisted, or private. Use private while testing.",
     "SPECULATIVE_KEYWORDS": "Topics allowed to post even when unverifiable (e.g. ufo,alien). Others need a clean fact-check.",
-    "POSTS_PER_RUN": "How many clips per scheduled run (cloud). Default 2.",
-    "SUBSCRIBE_URL": "Optional. A channel link auto-added to every post's description as a subscribe call-to-action. Use the channel-ID form (youtube.com/channel/UC...) so it survives handle changes. Blank = off.",
-    "SUBSCRIBE_CTA": "Optional label before the subscribe link. Default 'Subscribe for more'."
+    "POSTS_PER_RUN": "How many clips per scheduled run (cloud). Default 2."
   },
 
   "presets": {

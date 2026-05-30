@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from .. import costs, review
-from ..config import settings
 
 TARGETS = ("youtube", "facebook")
 
@@ -22,13 +21,6 @@ def _title_and_description(item: review.Item) -> tuple[str, str, list[str]]:
         desc = f"{desc}\n\n{(cta + ': ') if cta else ''}{link}".strip()
     elif cta:
         desc = f"{desc}\n\n{cta}".strip()
-    # Optional channel subscribe CTA, appended to every post if SUBSCRIBE_URL is
-    # set. ?sub_confirmation=1 pops the subscribe dialog when clicked.
-    sub = settings.subscribe_url
-    if sub and sub not in desc:
-        sep = "&" if "?" in sub else "?"
-        sub_link = sub if "sub_confirmation" in sub else f"{sub}{sep}sub_confirmation=1"
-        desc = f"{desc}\n\n{settings.subscribe_cta}: {sub_link}".strip()
     if hashtags:
         desc = f"{desc}\n\n" + " ".join(f"#{h.lstrip('#')}" for h in hashtags)
     return title, desc.strip(), hashtags

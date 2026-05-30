@@ -71,11 +71,6 @@ class Settings:
     youtube_client_secrets: str = field(default_factory=lambda: _env("YOUTUBE_CLIENT_SECRETS", "secrets/youtube_client_secret.json"))
     youtube_token_file: str = field(default_factory=lambda: _env("YOUTUBE_TOKEN_FILE", "secrets/youtube_token.json"))
     youtube_privacy: str = field(default_factory=lambda: _env("YOUTUBE_PRIVACY", "private"))
-    # Optional channel/subscribe link auto-appended to every post description as a
-    # CTA. Blank = nothing added (keeps the repo generic for other users). Use the
-    # channel-ID URL (.../channel/UC...) — it survives handle changes.
-    subscribe_url: str = field(default_factory=lambda: _env("SUBSCRIBE_URL"))
-    subscribe_cta: str = field(default_factory=lambda: _env("SUBSCRIBE_CTA", "Subscribe for more"))
 
     facebook_page_id: str = field(default_factory=lambda: _env("FACEBOOK_PAGE_ID"))
     facebook_page_token: str = field(default_factory=lambda: _env("FACEBOOK_PAGE_TOKEN"))
