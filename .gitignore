@@ -12,8 +12,11 @@ data/work/*
 # control/log files (kept local; never commit)
 data/PAUSED
 data/auto.log
-# NOTE: data/used_*.json, data/last_voice.txt and data/costs.jsonl ARE tracked
-# so the cloud job can persist dedup state + the spend ledger between runs.
+# The spend ledger stays LOCAL — it accumulates video IDs + costs and we don't
+# want it published. View it locally with `python -m socialbot.cli costs`.
+data/costs.jsonl
+# NOTE: data/used_*.json and data/last_voice.txt ARE tracked (harmless footage
+# IDs / voice name) so the cloud job can persist dedup state between runs.
 
 # Local editor/agent settings
 .claude/settings.local.json
