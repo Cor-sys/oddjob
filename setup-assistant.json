@@ -44,7 +44,7 @@
   "api_keys": {
     "gemini": {"steps": ["Go to https://aistudio.google.com/apikey", "Click 'Create API key'", "Copy the key", "Paste it in .env after GEMINI_API_KEY="], "free_note": "Free tier is enough for testing and ~3 posts/day. For heavier use, attach billing in Google Cloud — same key, just higher limits."},
     "pexels": {"steps": ["Make a free account at https://www.pexels.com/api/", "Copy your API key", "Paste it in .env after PEXELS_API_KEY="]},
-    "youtube": {"steps": ["Open https://console.cloud.google.com and create or pick a project", "APIs & Services -> Enable APIs -> search 'YouTube Data API v3' -> Enable", "OAuth consent screen -> choose External -> add your own email as a Test user", "Credentials -> Create Credentials -> OAuth client ID -> Application type: Desktop app", "Download the JSON file and save it as secrets/youtube_client_secret.json inside the Oddjob folder", "Run: python -m socialbot.cli youtube-auth  (a browser opens; approve it)"], "important": "Keep the OAuth app in 'Testing' status for personal use — its token never expires that way. If you ever publish it to 'Production', the token expires after 7 days and you re-run youtube-auth."},
+    "youtube": {"steps": ["Open https://console.cloud.google.com and create or pick a project", "APIs & Services -> Enable APIs -> search 'YouTube Data API v3' -> Enable", "OAuth consent screen -> choose External -> add your own email as a Test user", "On the OAuth consent screen click 'Publish app' to move it from Testing to 'In production' (accept the unverified-app notice; this is REQUIRED so the token does not expire)", "Credentials -> Create Credentials -> OAuth client ID -> Application type: Desktop app", "Download the JSON file and save it as secrets/youtube_client_secret.json inside the Oddjob folder", "Run: python -m socialbot.cli youtube-auth  (a browser opens; approve it)"], "important": "You MUST publish the OAuth app to 'In production'. While it is in 'Testing' status Google expires the refresh token after 7 DAYS and the bot stops posting. In production the token is long-lived. Fix: OAuth consent screen -> Publish app (accept the unverified-app notice, fine for your own use), then re-run youtube-auth to get a fresh long-lived token."},
     "nasa": {"steps": ["Optional. Works with no key (50 requests/day).", "For more, register free at https://api.nasa.gov/ and the bot picks it up."]},
     "facebook": {"optional": true, "steps": ["Create a Facebook Page", "At https://developers.facebook.com create a Business app, add Graph API", "Generate a Page access token with pages_manage_posts + pages_read_engagement, exchange it for a long-lived token", "Put FACEBOOK_PAGE_ID and FACEBOOK_PAGE_TOKEN in .env"]}
   },
@@ -128,7 +128,7 @@
     {"symptom": "'ffmpeg' not found / video won't render", "fix": "ffmpeg isn't installed or not on your PATH. Reinstall it (what_you_need.software) and confirm 'ffmpeg -version' works."},
     {"symptom": "A run posts 0 videos", "fix": "The fact-checker held the topic (unverifiable or contradicted). Normal occasionally. Generating 2/run gives a buffer."},
     {"symptom": "Gemini calls fail after a few videos", "fix": "You hit the free 20/day limit. Wait for the daily reset (midnight Pacific) or attach billing for higher limits."},
-    {"symptom": "YouTube stops working after ~7 days", "fix": "Your OAuth app is in 'Production' — keep it in 'Testing' status, then re-run youtube-auth (see api_keys.youtube.important)."},
+    {"symptom": "YouTube stops working after ~7 days", "fix": "Your OAuth app is still in 'Testing' status, where Google expires the token after 7 days. Go to Google Cloud Console -> OAuth consent screen -> Publish app (move to 'In production'), then re-run youtube-auth and update the YOUTUBE_TOKEN secret with the new token."},
     {"symptom": "Footage looks off-topic", "fix": "Make CONTENT_NICHE and your keywords more specific and concrete."}
   ],
 
@@ -136,6 +136,7 @@
     "python --version shows 3.11+",
     "ffmpeg -version works",
     ".env has your GEMINI_API_KEY",
+    "OAuth consent screen is published to 'In production' (so the token doesn't die after 7 days)",
     "youtube-auth completed (a token was saved)",
     "generate --count 1 produced a clip you watched",
     "YOUTUBE_PRIVACY=private while testing"
