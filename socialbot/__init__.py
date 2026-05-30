@@ -1,3 +1,3 @@
-"""social media bot — scrape trends, generate short clips, review, publish."""
+"""Oddjob — scrape trends, generate short clips, review, publish."""
 
 __version__ = "0.1.0"

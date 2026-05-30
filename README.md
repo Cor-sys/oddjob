@@ -1,6 +1,14 @@
-# Social Media Bot
+<p align="center">
+  <img src="assets/oddjob-logo.png" alt="Oddjob" width="240">
+</p>
 
-An automated short-form video channel that runs **entirely in the cloud** and is **free to start**. It finds trending stories (or uses topics you provide), writes a punchy script, fact-checks it, renders a voiced and captioned 9:16 clip, and posts it to **YouTube** automatically on a schedule — no server, no manual work.
+<h1 align="center">Oddjob</h1>
+
+<p align="center"><em>Your silent henchman for short-form content — he handles all the odd jobs.</em></p>
+
+---
+
+**Oddjob** is an automated short-form video bot that runs **entirely in the cloud** and is **free to start**. It finds trending stories (or uses topics you provide), writes a punchy script, fact-checks it, renders a voiced and captioned 9:16 clip, and posts it to **YouTube** automatically on a schedule — no server, no manual work. It also does **promos**: turn your own song, product, or link into a post with one command.
 
 ```
 Trend discovery  OR  your own topic

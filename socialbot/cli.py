@@ -1,4 +1,4 @@
-"""Command-line interface for the social media bot.
+"""Command-line interface for Oddjob.
 
 Examples:
   python -m socialbot.cli voices
