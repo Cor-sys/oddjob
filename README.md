@@ -11,6 +11,11 @@
   <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/cost-free%20to%20start-brightgreen" alt="Free to start">
   <img src="https://img.shields.io/badge/runs-100%25%20in%20the%20cloud-orange" alt="Runs in the cloud">
+  <a href="https://www.youtube.com/channel/UCXnzkKf4qdGl1cGcmW6ZqoQ"><img src="https://img.shields.io/badge/▶%20see%20it%20live-YouTube-red?logo=youtube&logoColor=white" alt="Live channel"></a>
+</p>
+
+<p align="center">
+  <strong>▶️ See it running live:</strong> <a href="https://www.youtube.com/channel/UCXnzkKf4qdGl1cGcmW6ZqoQ">@VoidRunnerAImax</a> — every video on this channel was generated, fact-checked, and posted entirely by Oddjob.
 </p>
 
 ---
