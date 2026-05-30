@@ -22,7 +22,7 @@ _gen = {"running": False, "msg": ""}
 
 _PAGE = """
 <!doctype html><html><head><meta charset="utf-8">
-<title>Social Media Bot — Review</title>
+<title>Oddjob — Review</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root { color-scheme: dark; }
@@ -49,7 +49,7 @@ _PAGE = """
   .section { margin:26px 0 10px; font-size:14px; color:#8a8f98; text-transform:uppercase; letter-spacing:.05em; }
   .empty { color:#6b7280; font-size:14px; }
 </style></head><body>
-<h1>Social Media Bot — Review queue</h1>
+<h1>Oddjob — Review queue</h1>
 <div class="sub">Nothing posts without your approval.</div>
 
 {% with msgs = get_flashed_messages() %}{% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}{% endwith %}
