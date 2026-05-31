@@ -17,6 +17,7 @@ from .media.assemble import assemble, trim_audio
 from .media.captions import build_ass
 from .media.router import fetch_visuals
 from .media.tts import _probe_duration, pick_voice, synthesize
+from .research import research
 from .script import Script, write_script
 from .trends import Topic, discover
 
@@ -30,8 +31,10 @@ def generate_from_topic(topic: Topic, *, seconds: int | None = None, build_video
     seconds = seconds or settings.clip_seconds
     # Tag every Gemini call below with this topic so its spend rolls up per-video.
     with costs.track(topic=topic.title) as run:
+        print(f"  -> researching: {topic.title}")
+        dossier = research(topic)
         print(f"  -> scripting: {topic.title}")
-        script = write_script(topic, seconds)
+        script = write_script(topic, seconds, dossier=dossier)
 
         print("  -> fact-checking...")
         fc = factcheck.vet(script)
@@ -39,6 +42,7 @@ def generate_from_topic(topic: Topic, *, seconds: int | None = None, build_video
 
         meta = {
             "topic": topic.to_dict(),
+            "research": dossier.to_dict(),
             "topic_title": topic.title,
             "on_screen_title": script.on_screen_title,
             "script": script.to_dict(),
@@ -67,14 +71,41 @@ def generate_from_topic(topic: Topic, *, seconds: int | None = None, build_video
         return item
 
 
+def align_beats(shot_list, words) -> list[tuple[float, float]]:
+    """Map each shot-list beat to a (start, end) time span using the TTS word
+    timings, consuming words in order. Returns [] when there are no timings
+    (caller then falls back to even cuts)."""
+    if not words or not shot_list:
+        return []
+    spans: list[tuple[float, float]] = []
+    n = len(words)
+    idx = 0
+    for beat in shot_list:
+        wc = max(1, len(beat.text.split()))
+        s_i = min(idx, n - 1)
+        e_i = min(idx + wc - 1, n - 1)
+        spans.append((words[s_i].start, words[e_i].end))
+        idx += wc
+    return spans
+
+
 def _render(item: review.Item, script: Script, topic: Topic) -> None:
     work = item.dir / "work"
     work.mkdir(parents=True, exist_ok=True)
 
-    voice = pick_voice()
+    # Reuse a pre-assigned voice (a reserve recipe / experiment arm may have
+    # fixed one) so a re-render sounds identical; otherwise rotate the pool.
+    voice = item.meta.get("voice") or pick_voice()
     print(f"  -> voiceover ({voice})...")
     vo = synthesize(script.narration, item.dir / "voice.mp3", voice=voice)
     item.meta["voice"] = voice
+
+    # Tag this video's experiment arm so analytics can attribute retention to the
+    # topic cluster / hook style / length / voice (Phase 5 feedback loop).
+    from . import experiment
+    item.meta["experiment_arm"] = experiment.assign_arm(
+        topic, script, voice=voice, seconds=item.meta.get("clip_seconds"),
+    )
 
     print("  -> captions...")
     ass = build_ass(
@@ -83,24 +114,98 @@ def _render(item: review.Item, script: Script, topic: Topic) -> None:
     )
 
     print("  -> visuals...")
-    media = fetch_visuals(topic, script, work)
-    if not media:
+    beat_paths, credits = fetch_visuals(topic, script, work)
+    if not beat_paths:
         print("     (no footage available — using gradient background)")
+
+    # Cut footage to the narration beats when we have per-beat footage + timings.
+    beats = None
+    if beat_paths and script.shot_list:
+        spans = align_beats(script.shot_list, vo.words)
+        if spans:
+            beats = [(s, e, p) for (s, e), p in zip(spans, beat_paths)]
 
     print("  -> assembling...")
     clip = assemble(
         audio_path=vo.audio_path,
         ass_path=ass,
-        broll_paths=media,
+        broll_paths=beat_paths,
         out_path=item.dir / "clip.mp4",
         duration=vo.duration,
         work_dir=work,
+        beats=beats,
     )
 
     item.meta["clip"] = clip.name
     item.meta["duration"] = round(vo.duration, 2)
-    item.meta["used_broll"] = bool(media)
+    item.meta["used_broll"] = bool(beat_paths)
+    item.meta["sources_used"] = credits
     item.save()
+
+
+def next_publish_times(n: int, *, times: list[str] | None = None, tz: str | None = None) -> list[str]:
+    """Compute the next `n` future publish slots as RFC-3339 UTC strings.
+
+    Each configured HH:MM in `settings.publish_times` (interpreted in
+    `settings.schedule_tz`, default UTC) becomes today's occurrence, rolled to
+    tomorrow if already past. If more slots are needed than there are configured
+    times, they spill onto following days. Used to stagger the daily batch's
+    posts via native YouTube `publishAt`."""
+    from datetime import datetime, timedelta, timezone
+
+    times = times or settings.publish_times
+    tzname = (tz or settings.schedule_tz or "UTC").strip()
+    if tzname.upper() == "UTC":
+        zone = timezone.utc
+    else:
+        try:
+            from zoneinfo import ZoneInfo
+            zone = ZoneInfo(tzname)
+        except Exception:  # unknown tz / missing tzdata -> degrade to UTC
+            print(f"  [schedule] unknown timezone {tzname!r}; using UTC")
+            zone = timezone.utc
+
+    now = datetime.now(zone)
+    base: list[datetime] = []
+    for t in times:
+        try:
+            hh, mm = (int(x) for x in t.split(":")[:2])
+        except (ValueError, TypeError):
+            continue
+        cand = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        if cand <= now:
+            cand += timedelta(days=1)
+        base.append(cand)
+    if not base:  # misconfigured PUBLISH_TIMES — fall back to evenly-spaced slots
+        base = [now + timedelta(hours=2 * (i + 1)) for i in range(max(n, 1))]
+    base.sort()
+
+    slots: list[datetime] = []
+    day = 0
+    while len(slots) < n:
+        for s in base:
+            slots.append(s + timedelta(days=day))
+            if len(slots) >= n:
+                break
+        day += 1
+    slots.sort()
+    return [
+        s.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        for s in slots[:n]
+    ]
+
+
+def schedule_item(item: review.Item, publish_at: str, *, targets: tuple[str, ...] = ("youtube",)) -> dict:
+    """Approve and publish one rendered item with a native `publishAt` so YouTube
+    auto-publishes it later. Returns the per-platform publish results."""
+    from .publish import publish_item
+
+    if not item.clip_path:
+        raise RuntimeError(f"Item {item.id} has no clip to schedule.")
+    review.approve(item.id)
+    fresh = review.get(item.id)
+    print(f"  -> scheduling {item.id} for {publish_at}")
+    return publish_item(fresh, targets=targets, publish_at=publish_at)
 
 
 def generate(count: int = 3, *, niche: str | None = None, seconds: int | None = None) -> list[review.Item]:

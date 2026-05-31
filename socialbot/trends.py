@@ -25,6 +25,10 @@ class Topic:
     why_trending: str = ""
     keywords: list[str] = field(default_factory=list)
     sources: list[str] = field(default_factory=list)
+    # Phase 4 demand signal (free YouTube autocomplete): how much real search
+    # interest the topic has, plus the actual autocomplete phrasings people use.
+    demand: float = 0.0
+    phrasings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -33,6 +37,8 @@ class Topic:
             "why_trending": self.why_trending,
             "keywords": self.keywords,
             "sources": self.sources,
+            "demand": self.demand,
+            "phrasings": self.phrasings,
         }
 
 

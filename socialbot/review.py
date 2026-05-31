@@ -13,13 +13,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .config import PENDING_DIR, PUBLISHED_DIR
+from .config import PENDING_DIR, PUBLISHED_DIR, RESERVE_DIR
 
 # review statuses
 PENDING = "pending"        # awaiting your decision
 APPROVED = "approved"      # you approved it; eligible to publish
 REJECTED = "rejected"      # you (or fact-check) rejected it
 PUBLISHED = "published"    # posted to at least one platform
+RESERVE = "reserve"        # tournament runner-up banked as a re-renderable recipe
 
 META = "meta.json"
 
@@ -83,7 +84,7 @@ def _load(item_dir: Path) -> Item | None:
 
 
 def get(item_id: str) -> Item | None:
-    for base in (PENDING_DIR, PUBLISHED_DIR):
+    for base in (PENDING_DIR, PUBLISHED_DIR, RESERVE_DIR):
         item = _load(base / item_id)
         if item:
             return item

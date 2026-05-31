@@ -9,6 +9,13 @@ data/pending/*
 data/published/*
 data/work/*
 !data/**/.gitkeep
+# Reserve bank: the recipes (meta.json) ARE tracked so they persist between
+# cloud runs, but a recipe's re-rendered clip/scratch is local-only.
+data/reserve/**/*.mp4
+data/reserve/**/*.mp3
+data/reserve/**/*.m4a
+data/reserve/**/work/
+data/reserve/**/*.ass
 # control/log files (kept local; never commit)
 data/PAUSED
 data/auto.log
@@ -20,6 +27,7 @@ data/costs.jsonl
 
 # Local editor/agent settings
 .claude/settings.local.json
+.wrangler/
 
 # Python
 __pycache__/

@@ -47,6 +47,9 @@ def _cmd_generate(args) -> int:
     from .pipeline import generate, generate_from_topic
     from .trends import Topic
 
+    if getattr(args, "dry_script", False):
+        return _dry_script(args)
+
     if args.topic:
         topic = Topic(
             title=args.topic,
@@ -58,6 +61,54 @@ def _cmd_generate(args) -> int:
     else:
         items = generate(count=args.count, niche=args.niche, seconds=args.seconds)
     print(f"\nGenerated {len(items)} item(s). Review with: python -m socialbot.cli list")
+    return 0
+
+
+def _dry_script(args) -> int:
+    """Research + write a script and print it (narration + shot list) without
+    rendering or fact-checking — fast way to eyeball the v2 mini-doc output."""
+    import re
+
+    from .research import research
+    from .script import write_script
+    from .trends import Topic, discover
+
+    if args.topic:
+        topic = Topic(
+            title=args.topic,
+            summary=args.facts or args.topic,
+            why_trending="user-provided",
+            keywords=[k.strip() for k in (args.keywords or "").split(",") if k.strip()],
+        )
+    else:
+        topics = discover(count=1, niche=args.niche)
+        if not topics:
+            print("No topics found.")
+            return 1
+        topic = topics[0]
+
+    print(f"\nTOPIC: {topic.title}")
+    dossier = research(topic)
+    thin = " (THIN — falling back to summary)" if dossier.is_thin else ""
+    print(f"  research: {len(dossier.facts)} facts, {len(dossier.entities)} entities{thin}")
+
+    script = write_script(topic, args.seconds, dossier=dossier)
+
+    print(f"\nHOOK CANDIDATES ({len(script.hook_candidates)}):")
+    for i, h in enumerate(script.hook_candidates, 1):
+        print(f"  {i}. {h}")
+    print(f"\nON-SCREEN TITLE: {script.on_screen_title}")
+    print(f"HOOK OVERLAY:    {script.hook_text}")
+    print(f"\nNARRATION:\n{script.narration}")
+    print(f"\nSHOT LIST ({len(script.shot_list)} beats):")
+    for i, b in enumerate(script.shot_list, 1):
+        print(f"  {i:>2}. [{b.kind:6s}] {b.query}")
+        print(f'       "{b.text}"')
+
+    norm = lambda t: re.sub(r"\s+", " ", t).strip().lower()
+    joined = " ".join(b.text for b in script.shot_list)
+    print(f"\nbeats reconstruct narration: {norm(joined) == norm(script.narration)}")
+    print(f"hashtags: {', '.join('#' + h for h in script.hashtags)}")
     return 0
 
 
@@ -193,6 +244,135 @@ def _cmd_auto(args) -> int:
     return 0
 
 
+def _cmd_batch(args) -> int:
+    from . import tournament
+    from .config import DATA_DIR
+
+    pause_file = DATA_DIR / "PAUSED"
+    if pause_file.exists() and not args.dry_run:
+        print(f"batch is PAUSED — delete {pause_file} to resume.")
+        return 0
+    tournament.run_batch(post=args.post, niche=args.niche, dry_run=args.dry_run)
+    return 0
+
+
+def _cmd_reserve(args) -> int:
+    from . import reserve
+
+    if args.action == "list":
+        items = reserve.list_reserve()
+        if not items:
+            print("Reserve bank is empty.")
+            return 0
+        for it in items:
+            sc = it.meta.get("judge_score", "?")
+            title = it.meta.get("on_screen_title", it.meta.get("topic_title", ""))
+            created = str(it.meta.get("created_at", ""))[:10]
+            print(f"  [{sc:>5}] {it.id}  {created}  {title}")
+        return 0
+
+    if args.action == "render":
+        if not args.id:
+            print("reserve render needs an <id>", file=sys.stderr)
+            return 2
+        item = reserve.render_reserve(args.id, publish_at=args.schedule)
+        print(f"Rendered {item.id} -> {item.clip_path}")
+        return 0
+
+    if args.action == "prune":
+        removed = reserve.prune_reserve(keep=args.keep)
+        print(f"Pruned {removed} recipe(s).")
+        return 0
+
+    print(f"unknown reserve action: {args.action}", file=sys.stderr)
+    return 2
+
+
+def _cmd_topics(args) -> int:
+    from . import demand, topic_bank, tournament
+
+    if args.action == "bank":
+        rows = topic_bank.load()["concepts"]
+        rows.sort(key=lambda e: float(e.get("score", 0) or 0), reverse=True)
+        if not rows:
+            print("Topic bank is empty.")
+            return 0
+        for e in rows:
+            used = "used" if e.get("used") else "    "
+            print(f"  [{float(e.get('score',0)):5.1f}] {used} demand={int(e.get('demand',0)):>3}  {e.get('title','')}")
+        return 0
+
+    if args.action == "decay":
+        result = topic_bank.decay()
+        print(f"Decayed topic bank: kept {result['kept']}, dropped {result['dropped']}.")
+        return 0
+
+    # default: mine fresh concepts, enrich with the demand signal, and show them
+    topics = tournament.concepts(args.count, niche=args.niche)
+    if not topics:
+        print("No concepts found.")
+        return 0
+    topics = demand.enrich(topics, args.niche)
+    topics.sort(key=lambda t: t.demand, reverse=True)
+    for t in topics:
+        print(f"\n[{t.demand:5.1f}] {t.title}")
+        print(f"    {t.summary}")
+        if t.phrasings:
+            print(f"    searches: {', '.join(t.phrasings)}")
+    return 0
+
+
+def _cmd_schedule(args) -> int:
+    from . import review
+    from .pipeline import schedule_item
+
+    item = review.get(args.id)
+    if not item:
+        print(f"Not found: {args.id}", file=sys.stderr)
+        return 1
+    if not item.clip_path:
+        print(f"{args.id} has no clip — render it first.", file=sys.stderr)
+        return 1
+    results = schedule_item(item, args.at)
+    yt = results.get("youtube", {})
+    print(yt.get("url") or yt.get("error") or results)
+    return 0
+
+
+def _cmd_analytics(args) -> int:
+    from . import analytics
+
+    rows = analytics.ingest(args.csv)
+    new = analytics.join(rows)
+    print(f"Ingested {len(rows)} row(s); recorded {new} new snapshot(s) for posts we made.")
+    if args.no_synth:
+        return 0
+    try:
+        strat = analytics.synthesize()
+    except RuntimeError as e:
+        print(f"(no strategy yet: {e})")
+        return 0
+    print(f"\nStrategy updated (sample size {strat['sample_size']}):")
+    for d in strat["directives"]:
+        print(f"  - {d}")
+    if strat.get("notes"):
+        print(f"  note: {strat['notes']}")
+    return 0
+
+
+def _cmd_strategy(args) -> int:
+    import json as _json
+
+    from . import analytics
+
+    strat = analytics.load_strategy()
+    if not strat:
+        print("No strategy yet — run `python -m socialbot.cli analytics <csv>`.")
+        return 0
+    print(_json.dumps(strat, indent=2, ensure_ascii=False))
+    return 0
+
+
 def _cmd_costs(args) -> int:
     import json as _json
 
@@ -289,6 +469,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="key facts / description for the custom topic")
     g.add_argument("--keywords", default=None, metavar="KW1,KW2",
                    help="comma-separated b-roll search keywords for custom topic")
+    g.add_argument("--dry-script", action="store_true",
+                   help="research + script only; print narration + shot list, no video render")
     g.set_defaults(func=_cmd_generate)
 
     pr = sub.add_parser("promo", help="PROMO: build a post from your own content (song/product/link)")
@@ -343,6 +525,46 @@ def build_parser() -> argparse.ArgumentParser:
     au.add_argument("--keywords", default=None, metavar="KW1,KW2",
                    help="comma-separated b-roll keywords for custom topic")
     au.set_defaults(func=_cmd_auto)
+
+    bt = sub.add_parser("batch", help="v2 daily tournament: mine -> develop -> post best, bank the rest")
+    bt.add_argument("--post", type=int, default=None, help="how many to post (default POSTS_PER_DAY)")
+    bt.add_argument("--niche", default=None)
+    bt.add_argument("--dry-run", action="store_true",
+                    help="run the full funnel + print the plan, but render/upload/bank nothing "
+                         "(still spends the day's LLM requests — it's a budget probe)")
+    bt.set_defaults(func=_cmd_batch)
+
+    rs = sub.add_parser("reserve", help="manage the reserve bank of runner-up recipes")
+    rs.add_argument("action", choices=["list", "render", "prune"])
+    rs.add_argument("id", nargs="?", default=None, help="recipe id (for render)")
+    rs.add_argument("--schedule", default=None, metavar="ISO",
+                    help="(render) also schedule via publishAt, e.g. 2026-06-01T19:00:00Z")
+    rs.add_argument("--keep", type=int, default=None,
+                    help="(prune) how many top recipes to keep (default RESERVE_MAX)")
+    rs.set_defaults(func=_cmd_reserve)
+
+    tp = sub.add_parser("topics", help="topic engine: mine + demand-enrich concepts, inspect the bank")
+    tp.add_argument("action", nargs="?", default="list", choices=["list", "bank", "decay"],
+                    help="list = mine + show demand (default); bank = show the topic bank; decay = age the bank")
+    tp.add_argument("--count", type=int, default=15)
+    tp.add_argument("--niche", default=None)
+    tp.set_defaults(func=_cmd_topics)
+
+    sc = sub.add_parser("schedule", help="schedule an already-rendered item via native publishAt")
+    sc.add_argument("id")
+    sc.add_argument("--at", required=True, metavar="ISO",
+                    help="RFC-3339 time, e.g. 2026-06-01T19:00:00Z")
+    sc.set_defaults(func=_cmd_schedule)
+
+    an = sub.add_parser("analytics", help="ingest a YouTube Studio CSV, join to posts, synthesize strategy")
+    an.add_argument("csv", help="path to a YouTube Studio analytics CSV export")
+    an.add_argument("--no-synth", action="store_true",
+                    help="ingest + join only; don't rebuild strategy.json")
+    an.set_defaults(func=_cmd_analytics)
+
+    st = sub.add_parser("strategy", help="show the learned strategy (data/strategy.json)")
+    st.add_argument("action", nargs="?", default="show", choices=["show"])
+    st.set_defaults(func=_cmd_strategy)
 
     co = sub.add_parser("costs", help="show estimated spend (Gemini) + YouTube posting usage")
     co.add_argument("--youtube", action="store_true", help="show only the YouTube-posting view")

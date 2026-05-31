@@ -64,7 +64,12 @@ def upload(
     description: str,
     tags: list[str] | None = None,
     privacy: str | None = None,
+    publish_at: str | None = None,
 ) -> dict:
+    """Upload a clip to YouTube. If `publish_at` (RFC-3339, e.g.
+    '2026-06-01T19:00:00Z') is given, the video is uploaded PRIVATE and YouTube
+    auto-publishes it at that time — native scheduling, verified working with
+    our upload-only scope. Without it, the configured privacy applies."""
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
 
@@ -72,6 +77,13 @@ def upload(
     # "#Shorts" + a vertical <60s clip is how YouTube classifies Shorts.
     if "#shorts" not in (title + description).lower():
         description = f"{description}\n\n#Shorts"
+
+    status = {"privacyStatus": privacy, "selfDeclaredMadeForKids": False}
+    if publish_at:
+        # Scheduling requires the video start private; YouTube flips it public at
+        # publishAt. (Setting publishAt on a public video is rejected by the API.)
+        status["privacyStatus"] = "private"
+        status["publishAt"] = publish_at
 
     youtube = build("youtube", "v3", credentials=_credentials())
     body = {
@@ -81,7 +93,7 @@ def upload(
             "tags": (tags or [])[:15],
             "categoryId": "25",  # News & Politics
         },
-        "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False},
+        "status": status,
     }
     media = MediaFileUpload(str(video_path), chunksize=-1, resumable=True, mimetype="video/mp4")
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
@@ -101,4 +113,9 @@ def upload(
     except Exception:
         pass
 
-    return {"platform": "youtube", "id": vid, "url": f"https://youtu.be/{vid}"}
+    result = {"platform": "youtube", "id": vid, "url": f"https://youtu.be/{vid}"}
+    scheduled = response.get("status", {}).get("publishAt")
+    if scheduled:
+        result["publish_at"] = scheduled
+        result["scheduled"] = True
+    return result

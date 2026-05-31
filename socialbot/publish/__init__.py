@@ -21,13 +21,22 @@ def _title_and_description(item: review.Item) -> tuple[str, str, list[str]]:
         desc = f"{desc}\n\n{(cta + ': ') if cta else ''}{link}".strip()
     elif cta:
         desc = f"{desc}\n\n{cta}".strip()
+    # Credit openly-licensed footage (Wikimedia Commons CC-BY etc.) for compliance.
+    credits = meta.get("sources_used") or []
+    if credits:
+        desc = f"{desc}\n\nFootage credits: " + "; ".join(credits[:8])
     if hashtags:
         desc = f"{desc}\n\n" + " ".join(f"#{h.lstrip('#')}" for h in hashtags)
     return title, desc.strip(), hashtags
 
 
-def publish_item(item: review.Item, targets: tuple[str, ...] = TARGETS) -> dict:
-    """Publish one approved item. Returns per-platform results."""
+def publish_item(item: review.Item, targets: tuple[str, ...] = TARGETS,
+                 publish_at: str | None = None) -> dict:
+    """Publish one approved item. Returns per-platform results.
+
+    `publish_at` (RFC-3339) schedules the YouTube upload for later via native
+    `publishAt` (uploaded private, auto-published at that time). Facebook has no
+    equivalent here, so it's skipped when scheduling to keep the stagger intact."""
     if item.status not in (review.APPROVED,):
         raise RuntimeError(
             f"Item {item.id} is '{item.status}', not approved. Approve it first."
@@ -44,13 +53,17 @@ def publish_item(item: review.Item, targets: tuple[str, ...] = TARGETS) -> dict:
         if "youtube" in targets:
             try:
                 from . import youtube
-                results["youtube"] = youtube.upload(clip, title, description, tags=hashtags)
-                print(f"  youtube -> {results['youtube'].get('url')}")
+                results["youtube"] = youtube.upload(
+                    clip, title, description, tags=hashtags, publish_at=publish_at
+                )
+                yt = results["youtube"]
+                when = f" (scheduled {yt['publish_at']})" if yt.get("publish_at") else ""
+                print(f"  youtube -> {yt.get('url')}{when}")
             except Exception as e:
                 results["youtube"] = {"error": str(e)}
                 print(f"  youtube FAILED: {e}")
 
-        if "facebook" in targets:
+        if "facebook" in targets and not publish_at:
             try:
                 from . import facebook
                 results["facebook"] = facebook.upload(clip, title, description)
