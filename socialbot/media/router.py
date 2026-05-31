@@ -10,9 +10,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from ..script import Script
+from ..script import Beat, Script
 from ..trends import Topic
-from . import nasa, stock
+from . import commons, nasa, stock
 
 # Unambiguous space terms (matched as whole words, so "startup" won't hit "star").
 # A single one of these is enough to route a topic to NASA footage.
@@ -74,8 +74,74 @@ def _is_space_topic(topic: Topic, script: Script) -> bool:
     return False
 
 
-def fetch_visuals(topic: Topic, script: Script, dest_dir: Path, max_items: int = 6) -> list[Path]:
-    """Return background media (images and/or clips) for this topic."""
+def _first(paths: list[Path]) -> Path | None:
+    return paths[0] if paths else None
+
+
+def _fetch_for_beat(beat: Beat, space_topic: bool, dest_dir: Path) -> tuple[Path | None, str | None]:
+    """Fetch one footage asset for a single shot-list beat, routed by its kind.
+    Returns (path, credit) — credit is set only for assets that require it (Commons)."""
+    kind = (beat.kind or "auto").lower()
+    q = beat.query
+
+    # Specific named subject -> Wikimedia Commons (real imagery stock lacks).
+    if kind == "entity":
+        assets = commons.fetch_media([q], dest_dir / "commons", 1)
+        if assets:
+            return assets[0].path, assets[0].credit
+        # fall through to space/stock if Commons has nothing usable
+
+    # Astronomy / spaceflight -> NASA public-domain media (great for real
+    # astronomy; named hardware like SpaceX should be tagged "entity" -> Commons).
+    if kind == "space" or (kind in ("auto", "entity") and space_topic):
+        p = _first(nasa.fetch_media([q], dest_dir / "nasa", 1))
+        if p:
+            return p, None
+
+    # Everything else -> Pexels stock; last-ditch NASA for space topics.
+    p = _first(stock.fetch_broll([q], dest_dir / "pexels", 1))
+    if p:
+        return p, None
+    if space_topic:
+        return _first(nasa.fetch_media([q], dest_dir / "nasa", 1)), None
+    return None, None
+
+
+def fetch_visuals(topic: Topic, script: Script, dest_dir: Path, max_items: int = 6) -> tuple[list[Path], list[str]]:
+    """Fetch footage for each shot-list beat. Returns (beat_paths, credits):
+      beat_paths -- one Path per beat in script.shot_list, in order, with empty
+                    beats backfilled from footage we did find (so none are blank);
+                    [] only when nothing at all could be fetched (caller -> gradient).
+      credits    -- required attribution strings (Wikimedia Commons), de-duped.
+    """
+    beats = script.shot_list
+    if not beats:
+        return _legacy_fetch(topic, script, dest_dir, max_items), []
+
+    space_topic = _is_space_topic(topic, script)
+    print(f"     [router] {len(beats)} beats ({'space' if space_topic else 'mixed'} topic)")
+    beat_paths: list[Path | None] = []
+    credits: list[str] = []
+    for beat in beats:
+        path, credit = _fetch_for_beat(beat, space_topic, dest_dir)
+        beat_paths.append(path)
+        if credit:
+            credits.append(credit)
+
+    have = [p for p in beat_paths if p]
+    if not have:
+        return [], []
+    # Backfill beats that found nothing by reusing footage we did get.
+    j = 0
+    for i in range(len(beat_paths)):
+        if beat_paths[i] is None:
+            beat_paths[i] = have[j % len(have)]
+            j += 1
+    return [p for p in beat_paths if p], list(dict.fromkeys(credits))
+
+
+def _legacy_fetch(topic: Topic, script: Script, dest_dir: Path, max_items: int) -> list[Path]:
+    """Old keyword-based fetch — used when a script has no shot list (e.g. promo)."""
     if _is_space_topic(topic, script):
         print("     [router] space topic -> NASA")
         keywords = script.broll_keywords + _SPACE_FALLBACKS

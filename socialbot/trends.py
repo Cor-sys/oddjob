@@ -1,6 +1,7 @@
 """Discover trending topics using Gemini + Google Search grounding."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from . import costs
@@ -25,6 +26,10 @@ class Topic:
     why_trending: str = ""
     keywords: list[str] = field(default_factory=list)
     sources: list[str] = field(default_factory=list)
+    # Phase 4 demand signal (free YouTube autocomplete): how much real search
+    # interest the topic has, plus the actual autocomplete phrasings people use.
+    demand: float = 0.0
+    phrasings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -33,7 +38,20 @@ class Topic:
             "why_trending": self.why_trending,
             "keywords": self.keywords,
             "sources": self.sources,
+            "demand": self.demand,
+            "phrasings": self.phrasings,
         }
+
+
+def _as_keywords(value) -> list[str]:
+    """Coerce the model's 'keywords' into a clean list. Tolerates the model
+    returning a single comma/semicolon-separated STRING (which, iterated as a
+    list, would shatter into individual characters)."""
+    if isinstance(value, str):
+        value = re.split(r"[,;]", value)
+    elif not isinstance(value, (list, tuple)):
+        return []
+    return [str(k).strip() for k in value if str(k).strip()]
 
 
 def discover(count: int = 5, niche: str | None = None) -> list[Topic]:
@@ -76,7 +94,7 @@ Return ONLY a JSON array of these objects. No prose, no markdown."""
                 title=str(item.get("title", "")).strip(),
                 summary=str(item.get("summary", "")).strip(),
                 why_trending=str(item.get("why_trending", "")).strip(),
-                keywords=[str(k).strip() for k in item.get("keywords", []) if k],
+                keywords=_as_keywords(item.get("keywords")),
                 sources=sources,
             )
         )

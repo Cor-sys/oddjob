@@ -158,15 +158,20 @@ def grounded_json(prompt: str, *, system: str | None = None) -> tuple[Any, list[
     return _extract_json(text), sources
 
 
-def json_call(prompt: str, *, schema: dict | None = None, system: str | None = None) -> Any:
-    """Structured generation (no search). Returns parsed JSON."""
+def json_call(prompt: str, *, schema: dict | None = None, system: str | None = None,
+              model: str | None = None) -> Any:
+    """Structured generation (no search). Returns parsed JSON.
+
+    `model` picks the primary model (defaults to the quality model); pass
+    `settings.gemini_calls_model` for cheap, mechanical JSON work so the daily
+    request budget stays split across the two free-tier model lanes."""
     config = types.GenerateContentConfig(
         response_mime_type="application/json",
         response_schema=schema,
         system_instruction=system,
         temperature=0.7,
     )
-    resp = _generate(prompt, config)
+    resp = _generate(prompt, config, model=model)
     return _extract_json(resp.text or "")
 
 

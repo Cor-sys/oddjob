@@ -1,31 +1,34 @@
 name: auto-post
 
-# Runs the bot on a schedule: generate -> fact-check -> auto-publish ok clips.
-# Times are UTC — see README for a timezone conversion table.
+# v2 daily TOURNAMENT batch. One run/day mines many concepts, develops the
+# strongest, fact-checks the finalists, posts the best `POSTS_PER_DAY`, and banks
+# the rest as re-renderable recipes. The winners upload PRIVATE with a native
+# YouTube `publishAt`, so YouTube auto-publishes them at the staggered times in
+# PUBLISH_TIMES (interpreted in SCHEDULE_TZ, default UTC).
 #
-# Default: 3 runs/day x 2 clips each = 6 generated, ~4 published after
-# fact-check filtering (1-2 held/rejected per day is normal).
-#
-# To customize without editing this file, set GitHub Variables in:
+# Customize without editing this file via GitHub Variables in:
 #   Settings -> Secrets and variables -> Actions -> Variables tab
-#   CONTENT_NICHE, CONTENT_TONE, CLIP_SECONDS, POSTS_PER_RUN, etc.
+#   POSTS_PER_DAY, PUBLISH_TIMES, SCHEDULE_TZ, CONTENT_NICHE, CONTENT_TONE, ...
 #   (see README -> Customization for the full list)
+#
+# Drop a file at data/PAUSED (committed) to pause posting without disabling CI.
 on:
   schedule:
-    - cron: "0 13 * * *"   # run 1 of 3  (adjust times to your timezone)
-    - cron: "0 18 * * *"   # run 2 of 3
-    - cron: "0 23 * * *"   # run 3 of 3
+    - cron: "0 12 * * *"   # one daily batch (12:00 UTC) — posts stagger later via publishAt
   workflow_dispatch:
     inputs:
-      count:
-        description: "Clips to generate this run (leave blank to use POSTS_PER_RUN)"
+      post:
+        description: "How many to post this batch (blank = POSTS_PER_DAY)"
+        default: ""
+      dry_run:
+        description: "Dry run: show the plan, post nothing (set to 'true')"
         default: ""
 
 permissions:
   contents: write
 
 jobs:
-  post:
+  batch:
     runs-on: ubuntu-latest
     concurrency:
       group: auto-post
@@ -52,11 +55,15 @@ jobs:
           FACEBOOK_PAGE_TOKEN:     ${{ secrets.FACEBOOK_PAGE_TOKEN }}
           # ── Customizable via GitHub Variables (Settings -> Variables) ──────
           CONTENT_NICHE:           ${{ vars.CONTENT_NICHE      || 'AI and emerging technology, space and astronomy, UFOs/UAPs and the search for extraterrestrial life' }}
-          CONTENT_TONE:            ${{ vars.CONTENT_TONE       || 'clear, punchy, plain-spoken explainer; smart and factual but neutral - no hype, no jokes' }}
-          CLIP_SECONDS:            ${{ vars.CLIP_SECONDS        || '25' }}
+          CONTENT_TONE:            ${{ vars.CONTENT_TONE       || 'a sharp, curious narrator who makes you lean in: vivid, specific, and confident, telling a real story rather than reciting facts; precise and grounded, never hype or clickbait' }}
+          CLIP_SECONDS:            ${{ vars.CLIP_SECONDS        || '38' }}
+          CLIP_SECONDS_MIN:        ${{ vars.CLIP_SECONDS_MIN    || '30' }}
+          CLIP_SECONDS_MAX:        ${{ vars.CLIP_SECONDS_MAX    || '45' }}
+          POSTS_PER_DAY:           ${{ vars.POSTS_PER_DAY       || '3' }}
+          PUBLISH_TIMES:           ${{ vars.PUBLISH_TIMES       || '14:00,19:00,00:00' }}
+          SCHEDULE_TZ:             ${{ vars.SCHEDULE_TZ         || 'UTC' }}
           TTS_VOICES:              ${{ vars.TTS_VOICES          || 'en-US-AndrewMultilingualNeural,en-US-BrianMultilingualNeural,en-US-ChristopherNeural,en-US-EricNeural,en-GB-RyanNeural,en-AU-WilliamNeural' }}
           SPECULATIVE_KEYWORDS:    ${{ vars.SPECULATIVE_KEYWORDS || 'ufo,ufos,uap,uaps,alien,aliens,extraterrestrial,flying saucer,close encounter,abduction,roswell,paranormal,cryptid' }}
-          YOUTUBE_PRIVACY:         ${{ vars.YOUTUBE_PRIVACY     || 'public' }}
         run: |
           mkdir -p secrets
           printf '%s' "$YOUTUBE_TOKEN" > secrets/youtube_token.json
@@ -70,26 +77,37 @@ jobs:
           CONTENT_NICHE=${CONTENT_NICHE}
           CONTENT_TONE=${CONTENT_TONE}
           CLIP_SECONDS=${CLIP_SECONDS}
+          CLIP_SECONDS_MIN=${CLIP_SECONDS_MIN}
+          CLIP_SECONDS_MAX=${CLIP_SECONDS_MAX}
+          POSTS_PER_DAY=${POSTS_PER_DAY}
+          PUBLISH_TIMES=${PUBLISH_TIMES}
+          SCHEDULE_TZ=${SCHEDULE_TZ}
           SPECULATIVE_KEYWORDS=${SPECULATIVE_KEYWORDS}
           YOUTUBE_TOKEN_FILE=secrets/youtube_token.json
-          YOUTUBE_PRIVACY=${YOUTUBE_PRIVACY}
+          # Scheduling uploads as PRIVATE is required; YouTube flips them public at publishAt.
+          YOUTUBE_PRIVACY=private
           FACEBOOK_PAGE_ID=${FACEBOOK_PAGE_ID}
           FACEBOOK_PAGE_TOKEN=${FACEBOOK_PAGE_TOKEN}
           EOF
 
-      - name: Generate and auto-publish
+      - name: Run the daily tournament batch
         run: |
-          if [ -n "${{ secrets.FACEBOOK_PAGE_TOKEN }}" ]; then TARGETS="youtube,facebook"; else TARGETS="youtube"; fi
-          # Manual dispatch count > POSTS_PER_RUN variable > default of 2
-          COUNT="${{ github.event.inputs.count }}"
-          COUNT="${COUNT:-${{ vars.POSTS_PER_RUN }}}"
-          COUNT="${COUNT:-2}"
-          python -m socialbot.cli auto --count "$COUNT" --targets "$TARGETS"
+          if [ -f data/PAUSED ]; then echo "data/PAUSED present — skipping batch."; exit 0; fi
+          POST="${{ github.event.inputs.post }}"
+          DRY="${{ github.event.inputs.dry_run }}"
+          ARGS=""
+          if [ -n "$POST" ]; then ARGS="$ARGS --post $POST"; fi
+          if [ "$DRY" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          python -m socialbot.cli batch $ARGS
 
-      - name: Persist dedup state
+      - name: Persist dedup state + reserve recipes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/used_broll.json data/used_nasa.json data/used_topics.json data/last_voice.txt 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update dedup state [skip ci]"
+          git add data/used_broll.json data/used_nasa.json data/used_topics.json \
+                  data/used_commons.json data/last_voice.txt \
+                  data/topic_bank.json data/strategy.json data/analytics.jsonl \
+                  data/reserve 2>/dev/null || true
+          # (reserve clips/scratch are gitignored, so only recipe meta.json is staged)
+          git diff --cached --quiet || git commit -m "chore: update dedup state + reserve recipes [skip ci]"
           git push || true

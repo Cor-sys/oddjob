@@ -13,9 +13,10 @@ load_dotenv(ROOT / ".env")
 DATA_DIR = ROOT / "data"
 PENDING_DIR = DATA_DIR / "pending"      # generated, awaiting your approval
 PUBLISHED_DIR = DATA_DIR / "published"  # approved + posted
+RESERVE_DIR = DATA_DIR / "reserve"      # tournament runners-up, banked as recipes
 WORK_DIR = DATA_DIR / "work"            # scratch space during generation
 
-for _d in (PENDING_DIR, PUBLISHED_DIR, WORK_DIR):
+for _d in (PENDING_DIR, PUBLISHED_DIR, RESERVE_DIR, WORK_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 
@@ -64,9 +65,29 @@ class Settings:
     )))
     content_tone: str = field(default_factory=lambda: _env(
         "CONTENT_TONE",
-        "clear, punchy, plain-spoken explainer; smart and factual but neutral — no hype, no jokes",
+        "a sharp, curious narrator who makes you lean in: vivid, specific, and "
+        "confident, telling a real story rather than reciting facts; precise and "
+        "grounded, never hype or clickbait",
     ))
-    clip_seconds: int = field(default_factory=lambda: int(_env("CLIP_SECONDS", "25") or 25))
+    # v2 mini-docs run a touch longer than the old 25s explainers. A per-video
+    # jitter between MIN and MAX (Phase 5) creates real length experiment-arms.
+    clip_seconds: int = field(default_factory=lambda: int(_env("CLIP_SECONDS", "38") or 38))
+    clip_seconds_min: int = field(default_factory=lambda: int(_env("CLIP_SECONDS_MIN", "30") or 30))
+    clip_seconds_max: int = field(default_factory=lambda: int(_env("CLIP_SECONDS_MAX", "45") or 45))
+
+    # Branding: a small persistent corner logo "bug" + a brief logo outro card.
+    # NO front-loaded intro (a logo before the hook kills Shorts retention).
+    branding_enabled: bool = field(default_factory=lambda: _env("BRANDING_ENABLED", "true").lower() != "false")
+    logo_path: str = field(default_factory=lambda: _env("LOGO_PATH", "assets/oddjob-logo.png"))
+    logo_opacity: float = field(default_factory=lambda: float(_env("LOGO_OPACITY", "0.85") or 0.85))
+    logo_scale_w: int = field(default_factory=lambda: int(_env("LOGO_SCALE_W", "150") or 150))
+    # Length of the full-screen logo outro card; 0 = no outro card (the video
+    # just ends on the last beat). Corner logo bug is controlled by BRANDING_ENABLED.
+    endcard_seconds: float = field(default_factory=lambda: float(_env("ENDCARD_SECONDS", "0") or 0))
+    # Music bed (off until a monetization-safe track is dropped in MUSIC_DIR).
+    music_enabled: bool = field(default_factory=lambda: _env("MUSIC_ENABLED", "false").lower() == "true")
+    music_dir: str = field(default_factory=lambda: _env("MUSIC_DIR", "assets/music"))
+    music_volume: float = field(default_factory=lambda: float(_env("MUSIC_VOLUME", "0.08") or 0.08))
 
     youtube_client_secrets: str = field(default_factory=lambda: _env("YOUTUBE_CLIENT_SECRETS", "secrets/youtube_client_secret.json"))
     youtube_token_file: str = field(default_factory=lambda: _env("YOUTUBE_TOKEN_FILE", "secrets/youtube_token.json"))
@@ -74,6 +95,32 @@ class Settings:
 
     facebook_page_id: str = field(default_factory=lambda: _env("FACEBOOK_PAGE_ID"))
     facebook_page_token: str = field(default_factory=lambda: _env("FACEBOOK_PAGE_TOKEN"))
+
+    # ── v2 best-of-N tournament + daily batch (Phase 3) ─────────────────────
+    # One daily batch mines many concepts, develops the strongest, and posts the
+    # best `posts_per_day`; survivors that clear fact-check + a score floor are
+    # banked as re-renderable recipes. Sized to fit the free tier (~20 Flash +
+    # ~20 Flash-Lite requests/day). See the budget table in the v2 plan.
+    posts_per_day: int = field(default_factory=lambda: int(_env("POSTS_PER_DAY", "3") or 3))
+    concepts_n: int = field(default_factory=lambda: int(_env("CONCEPTS_N", "15") or 15))
+    develop_n: int = field(default_factory=lambda: int(_env("DEVELOP_N", "10") or 10))
+    # How many top unused concepts from the topic bank to merge into each batch's
+    # scoring pool (Phase 4 — strong ideas we didn't have room to make carry over).
+    bank_merge_n: int = field(default_factory=lambda: int(_env("BANK_MERGE_N", "5") or 5))
+    finalists_n: int = field(default_factory=lambda: int(_env("FINALISTS_N", "4") or 4))
+    # A banked recipe must clear fact-check AND score at/above this judge floor.
+    bank_score_floor: float = field(default_factory=lambda: float(_env("BANK_SCORE_FLOOR", "60") or 60))
+    # Soft ceiling on LLM calls in one batch — stop developing new concepts past
+    # this so retries never blow the free-tier daily limit.
+    batch_call_ceiling: int = field(default_factory=lambda: int(_env("BATCH_CALL_CEILING", "36") or 36))
+    # Reserve bank: keep at most this many recipes; re-vet any older than N days
+    # before re-rendering (1 grounded call, off the daily budget).
+    reserve_max: int = field(default_factory=lambda: int(_env("RESERVE_MAX", "30") or 30))
+    reserve_revet_days: int = field(default_factory=lambda: int(_env("RESERVE_REVET_DAYS", "7") or 7))
+    # Native YouTube publishAt scheduling: the times of day to stagger the daily
+    # posts at, interpreted in SCHEDULE_TZ (default UTC). One slot per post.
+    publish_times: list[str] = field(default_factory=lambda: _csv(_env("PUBLISH_TIMES", "14:00,19:00,00:00")))
+    schedule_tz: str = field(default_factory=lambda: _env("SCHEDULE_TZ", "UTC") or "UTC")
 
     def require_gemini(self) -> None:
         if not self.gemini_api_key:
