@@ -55,7 +55,7 @@ jobs:
           FACEBOOK_PAGE_TOKEN:     ${{ secrets.FACEBOOK_PAGE_TOKEN }}
           # ── Customizable via GitHub Variables (Settings -> Variables) ──────
           CONTENT_NICHE:           ${{ vars.CONTENT_NICHE      || 'AI and emerging technology, space and astronomy, UFOs/UAPs and the search for extraterrestrial life' }}
-          CONTENT_TONE:            ${{ vars.CONTENT_TONE       || 'clear, punchy, plain-spoken explainer; smart and factual but neutral - no hype, no jokes' }}
+          CONTENT_TONE:            ${{ vars.CONTENT_TONE       || 'a sharp, curious narrator who makes you lean in: vivid, specific, and confident, telling a real story rather than reciting facts; precise and grounded, never hype or clickbait' }}
           CLIP_SECONDS:            ${{ vars.CLIP_SECONDS        || '38' }}
           CLIP_SECONDS_MIN:        ${{ vars.CLIP_SECONDS_MIN    || '30' }}
           CLIP_SECONDS_MAX:        ${{ vars.CLIP_SECONDS_MAX    || '45' }}

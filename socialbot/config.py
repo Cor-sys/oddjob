@@ -65,7 +65,9 @@ class Settings:
     )))
     content_tone: str = field(default_factory=lambda: _env(
         "CONTENT_TONE",
-        "clear, punchy, plain-spoken explainer; smart and factual but neutral — no hype, no jokes",
+        "a sharp, curious narrator who makes you lean in: vivid, specific, and "
+        "confident, telling a real story rather than reciting facts; precise and "
+        "grounded, never hype or clickbait",
     ))
     # v2 mini-docs run a touch longer than the old 25s explainers. A per-video
     # jitter between MIN and MAX (Phase 5) creates real length experiment-arms.

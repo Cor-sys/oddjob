@@ -31,6 +31,37 @@ _CLUSTERS: list[tuple[str, set[str]]] = [
 # Length buckets (seconds) used as discrete arms.
 _BUCKETS = {"short": (30, 35), "mid": (36, 40), "long": (41, 45)}
 
+# Abstract/conceptual angles that free archives can't illustrate well — they only
+# yield generic, cheesy stock (a person at a laptop for "AI regulation").
+_ABSTRACT = {
+    "economics", "economy", "policy", "policies", "regulation", "regulatory",
+    "market", "markets", "valuation", "funding", "investment", "investors",
+    "lawsuit", "debate", "ethics", "ethical", "inflation", "politics", "political",
+    "opinion", "forecast", "earnings", "stocks", "subsidy", "tariff", "antitrust",
+}
+
+
+def footage_affinity(topic) -> float:
+    """How well FREE archives (NASA / Wikimedia / Pexels) can actually illustrate a
+    concept, as a ranking multiplier in [0.6, 1.3]. Space/astronomy scores highest
+    (NASA's library is rich and on-topic); abstract 'concept' topics that only
+    return generic stock score lowest. Used to steer topic selection toward ideas
+    we can show well — the channel's footage is only as good as its archives."""
+    text = " ".join([
+        getattr(topic, "title", ""), getattr(topic, "summary", ""),
+        " ".join(getattr(topic, "keywords", []) or []),
+    ])
+    cluster = classify_cluster(text)
+    words = set(re.findall(r"[a-z0-9]+", text.lower()))
+    score = 1.0
+    if cluster == "space":
+        score += 0.25                       # NASA: abundant, gorgeous, on-topic
+    elif cluster == "ufo_uap":
+        score += 0.05                        # some real archival/military footage
+    if words & _ABSTRACT:
+        score -= 0.20                        # only generic stock available
+    return max(0.6, min(1.3, score))
+
 
 def classify_cluster(text: str) -> str:
     words = set(re.findall(r"[a-z0-9]+", (text or "").lower()))

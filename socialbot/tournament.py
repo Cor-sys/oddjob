@@ -161,11 +161,14 @@ def score_concepts(topics: list[Topic], keep: int | None = None) -> list[tuple[T
     prompt = f"""Score each candidate 0-100 on its potential as a 30-45 second,
 retention-optimized mini-documentary Short.
 
-Reward: a specific, surprising, under-told angle; strong visual potential; enough
-real depth to sustain 40 seconds; evergreen curiosity; and genuine audience
-demand (the search-demand hint reflects real YouTube autocomplete interest).
-Penalize: broad/generic headlines, thin or purely-opinion topics, anything hard
-to show on screen.
+Reward: a specific, surprising, under-told angle; enough real depth to sustain 40
+seconds; evergreen curiosity; genuine audience demand (the search-demand hint
+reflects real YouTube autocomplete interest); and — heavily — FOOTAGE
+AVAILABILITY: topics we can actually show with free archives (space/astronomy via
+NASA; famous named people, places, missions, machines via Wikimedia; concrete
+real-world scenes). Penalize hard: abstract or purely-conceptual angles (policy,
+economics, regulation, debates, valuations) that only yield generic stock footage,
+plus broad/generic headlines and thin opinion topics.
 
 CANDIDATES:
 {listing}
@@ -184,7 +187,10 @@ Return ONLY JSON covering EVERY candidate:
 
     def _weighted(topic: Topic, score: float) -> float:
         cluster = experiment.classify_cluster(topic.title + " " + " ".join(topic.keywords))
-        return score * analytics.cluster_weight(strategy, cluster)
+        # Strategy bias (learned) x footage availability (can we show it well?).
+        return (score
+                * analytics.cluster_weight(strategy, cluster)
+                * experiment.footage_affinity(topic))
 
     ranked = sorted(ranked_raw, key=lambda ts: _weighted(*ts), reverse=True)
 

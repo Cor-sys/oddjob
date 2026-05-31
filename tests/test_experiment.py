@@ -66,6 +66,20 @@ def test_jittered_seconds_in_range_and_strategy_biased():
         assert length_bucket(jittered_seconds(strat)) == "short"
 
 
+def test_footage_affinity_prefers_showable_topics():
+    from socialbot.experiment import footage_affinity
+    from socialbot.trends import Topic
+
+    space = Topic(title="Saturn's rings are vanishing", summary="Cassini saw ring rain", keywords=["saturn", "rings"])
+    abstract = Topic(title="The economics of AI regulation", summary="policy debate over markets", keywords=["regulation", "policy"])
+    plain = Topic(title="A new species of deep-sea fish", summary="found in a trench", keywords=["fish"])
+
+    fa_space, fa_abstract, fa_plain = footage_affinity(space), footage_affinity(abstract), footage_affinity(plain)
+    assert fa_space > fa_plain > fa_abstract        # NASA-rich > neutral > abstract stock-only
+    assert fa_space > 1.0 and fa_abstract < 1.0
+    assert 0.6 <= fa_abstract and fa_space <= 1.3   # clamped to range
+
+
 def _run_all():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:
