@@ -108,10 +108,9 @@ def _render(item: review.Item, script: Script, topic: Topic) -> None:
     )
 
     print("  -> captions...")
-    ass = build_ass(
-        vo.words, item.dir / "captions.ass",
-        title=script.on_screen_title, hook=script.hook_text,
-    )
+    # No opening title/hook card — the video starts straight into the footage with
+    # the narration captions rolling from t=0 (no "intro" overlay).
+    ass = build_ass(vo.words, item.dir / "captions.ass")
 
     print("  -> visuals...")
     beat_paths, credits = fetch_visuals(topic, script, work)

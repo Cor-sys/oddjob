@@ -58,6 +58,54 @@ def _make_gradient_bg(out: Path, duration: float, work: Path) -> None:
 # 2-4 seconds. We aim for ~3s segments and cycle the available media to fill the
 # clip, rather than stretching a couple of clips across the whole runtime.
 _TARGET_SEG = 3.0
+# Crossfade duration between segments. A short dissolve hides hard cuts and, more
+# importantly, forces a clean re-encode (see _concat_xfade) so segment joins don't
+# tear or break the timeline the way stream-copy concat does.
+_XFADE = 0.4
+
+
+def _concat_reencode(segments: list[str], out: Path, work: Path) -> None:
+    """Join segments into one continuously-timestamped stream by RE-ENCODING (not
+    `-c copy`). Stream-copy concat of independently-encoded segments leaves GOP/
+    timestamp discontinuities that tear frames at the joins and corrupt the
+    reported duration; re-encoding produces one clean, seekable video."""
+    list_file = work / "concat.txt"
+    list_file.write_text("".join(f"file '{s}'\n" for s in segments), encoding="utf-8")
+    _run(["-f", "concat", "-safe", "0", "-i", list_file.name,
+          "-vf", f"fps={FPS},setsar=1,format=yuv420p", "-fps_mode", "cfr",
+          "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", out.name], cwd=work)
+
+
+def _concat_xfade(seg_durs: list[tuple[str, float]], out: Path, work: Path,
+                  fade: float = _XFADE) -> None:
+    """Join segments with a short crossfade between each (smooth transitions, and
+    a clean re-encode). Falls back to a plain re-encode if the xfade graph fails."""
+    if len(seg_durs) == 1:
+        _run(["-i", seg_durs[0][0], "-vf", f"fps={FPS},setsar=1,format=yuv420p",
+              "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", out.name], cwd=work)
+        return
+    try:
+        inputs: list[str] = []
+        for name, _ in seg_durs:
+            inputs += ["-i", name]
+        chains: list[str] = []
+        prev = "0:v"
+        cum = seg_durs[0][1]
+        for i in range(1, len(seg_durs)):
+            offset = max(0.0, cum - fade)
+            label = f"vx{i}"
+            chains.append(
+                f"[{prev}][{i}:v]xfade=transition=fade:duration={fade:.2f}:"
+                f"offset={offset:.2f}[{label}]"
+            )
+            prev = label
+            cum += seg_durs[i][1] - fade
+        _run([*inputs, "-filter_complex", ";".join(chains), "-map", f"[{prev}]",
+              "-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+              "-pix_fmt", "yuv420p", out.name], cwd=work)
+    except RuntimeError:
+        # xfade is finicky; a clean hard-cut re-encode still fixes the tearing.
+        _concat_reencode([n for n, _ in seg_durs], out, work)
 
 
 def _video_segment(clip: Path, seg_name: str, seg: float, work: Path, start: float = 0.0) -> None:
@@ -120,10 +168,7 @@ def _make_media_bg(out: Path, media: list[Path], duration: float, work: Path) ->
             _video_segment(path, seg_name, seg, work, start=reuse * seg)
         segments.append(seg_name)
 
-    list_file = work / "concat.txt"
-    list_file.write_text("".join(f"file '{s}'\n" for s in segments), encoding="utf-8")
-    _run(["-f", "concat", "-safe", "0", "-i", list_file.name, "-c", "copy", out.name],
-         cwd=work)
+    _concat_reencode(segments, out, work)
 
 
 # Beats shorter than this would stutter as their own cut, so they merge forward.
@@ -155,11 +200,15 @@ def _make_beat_bg(out: Path, beats: list[tuple[float, float, Path]], duration: f
         _make_gradient_bg(out, duration + 1.5, work)
         return
 
-    pad = (duration + 1.0) - sum(s for s, _ in merged)
+    # Crossfades overlap consecutive segments by _XFADE, shortening the total by
+    # (N-1)*_XFADE — pad the last beat so the background still covers the audio.
+    n = len(merged)
+    target = (duration + 1.0) + (n - 1) * _XFADE
+    pad = target - sum(s for s, _ in merged)
     if pad > 0:
         merged[-1][0] += pad
 
-    segments: list[str] = []
+    seg_durs: list[tuple[str, float]] = []
     for i, (seg, path) in enumerate(merged):
         seg = max(_MIN_SEG, seg)
         seg_name = f"seg_{i}.mp4"
@@ -167,12 +216,9 @@ def _make_beat_bg(out: Path, beats: list[tuple[float, float, Path]], duration: f
             _image_segment(path, seg_name, seg, work, zoom_out=bool(i % 2))
         else:
             _video_segment(path, seg_name, seg, work)
-        segments.append(seg_name)
+        seg_durs.append((seg_name, seg))
 
-    list_file = work / "concat.txt"
-    list_file.write_text("".join(f"file '{s}'\n" for s in segments), encoding="utf-8")
-    _run(["-f", "concat", "-safe", "0", "-i", list_file.name, "-c", "copy", out.name],
-         cwd=work)
+    _concat_xfade(seg_durs, out, work)
 
 
 def _resolve_logo() -> Path | None:
@@ -248,26 +294,35 @@ def _compose_cmd(bg: Path, audio_path: Path, duration: float, out_name: str) -> 
         logo_idx = idx
         idx += 1
         inputs += ["-i", str(logo.resolve())]
-        end_start = max(0.0, duration - settings.endcard_seconds)
         bug_w = settings.logo_scale_w
-        card_w = int(W * 0.42)
         # The logo is a circular badge on an opaque black square, so we punch a
         # circular alpha mask (keep the inscribed disc, drop the black corners)
-        # instead of dimming the whole box. Applied to both the corner bug and
-        # the full-screen outro card.
+        # instead of dimming the whole box.
         mask = (
             "geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':"
             "a='if(lte((X-W/2)*(X-W/2)+(Y-H/2)*(Y-H/2),(W/2)*(W/2)),255,0)'"
         )
-        vfilter = (
-            f"[{logo_idx}:v]format=rgba,split=2[lga][lgb];"
-            f"[lga]scale={bug_w}:{bug_w},{mask},colorchannelmixer=aa={settings.logo_opacity}[bug];"
-            f"[lgb]scale={card_w}:{card_w},{mask}[card];"
-            f"[0:v][bug]overlay=W-w-40:50:eof_action=repeat[vb];"
-            f"[vb]ass=captions.ass[vc];"
-            f"[vc]drawbox=x=0:y=0:w=iw:h=ih:color=black@0.6:t=fill:enable='gte(t,{end_start:.2f})'[vd];"
-            f"[vd][card]overlay=(W-w)/2:(H-h)/2:enable='gte(t,{end_start:.2f})':eof_action=repeat[vout]"
-        )
+        if settings.endcard_seconds > 0:
+            # Corner logo bug + a brief full-screen logo outro card.
+            end_start = max(0.0, duration - settings.endcard_seconds)
+            card_w = int(W * 0.42)
+            vfilter = (
+                f"[{logo_idx}:v]format=rgba,split=2[lga][lgb];"
+                f"[lga]scale={bug_w}:{bug_w},{mask},colorchannelmixer=aa={settings.logo_opacity}[bug];"
+                f"[lgb]scale={card_w}:{card_w},{mask}[card];"
+                f"[0:v][bug]overlay=W-w-40:50:eof_action=repeat[vb];"
+                f"[vb]ass=captions.ass[vc];"
+                f"[vc]drawbox=x=0:y=0:w=iw:h=ih:color=black@0.6:t=fill:enable='gte(t,{end_start:.2f})'[vd];"
+                f"[vd][card]overlay=(W-w)/2:(H-h)/2:enable='gte(t,{end_start:.2f})':eof_action=repeat[vout]"
+            )
+        else:
+            # Corner logo bug only — no outro card (ENDCARD_SECONDS=0).
+            vfilter = (
+                f"[{logo_idx}:v]format=rgba,scale={bug_w}:{bug_w},{mask},"
+                f"colorchannelmixer=aa={settings.logo_opacity}[bug];"
+                f"[0:v][bug]overlay=W-w-40:50:eof_action=repeat[vb];"
+                f"[vb]ass=captions.ass[vout]"
+            )
     else:
         vfilter = "[0:v]ass=captions.ass[vout]"
 

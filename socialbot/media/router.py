@@ -91,7 +91,8 @@ def _fetch_for_beat(beat: Beat, space_topic: bool, dest_dir: Path) -> tuple[Path
             return assets[0].path, assets[0].credit
         # fall through to space/stock if Commons has nothing usable
 
-    # Astronomy / spaceflight -> NASA public-domain media.
+    # Astronomy / spaceflight -> NASA public-domain media (great for real
+    # astronomy; named hardware like SpaceX should be tagged "entity" -> Commons).
     if kind == "space" or (kind in ("auto", "entity") and space_topic):
         p = _first(nasa.fetch_media([q], dest_dir / "nasa", 1))
         if p:

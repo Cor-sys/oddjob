@@ -1,6 +1,7 @@
 """Discover trending topics using Gemini + Google Search grounding."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from . import costs
@@ -40,6 +41,17 @@ class Topic:
             "demand": self.demand,
             "phrasings": self.phrasings,
         }
+
+
+def _as_keywords(value) -> list[str]:
+    """Coerce the model's 'keywords' into a clean list. Tolerates the model
+    returning a single comma/semicolon-separated STRING (which, iterated as a
+    list, would shatter into individual characters)."""
+    if isinstance(value, str):
+        value = re.split(r"[,;]", value)
+    elif not isinstance(value, (list, tuple)):
+        return []
+    return [str(k).strip() for k in value if str(k).strip()]
 
 
 def discover(count: int = 5, niche: str | None = None) -> list[Topic]:
@@ -82,7 +94,7 @@ Return ONLY a JSON array of these objects. No prose, no markdown."""
                 title=str(item.get("title", "")).strip(),
                 summary=str(item.get("summary", "")).strip(),
                 why_trending=str(item.get("why_trending", "")).strip(),
-                keywords=[str(k).strip() for k in item.get("keywords", []) if k],
+                keywords=_as_keywords(item.get("keywords")),
                 sources=sources,
             )
         )

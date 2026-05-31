@@ -20,6 +20,24 @@ _USED_FILE = DATA_DIR / "used_nasa.json"
 
 _IMG_EXT = (".jpg", ".jpeg", ".png")
 
+# NASA's library mixes real photography with illustrations, artist's concepts,
+# schematics and charts. For footage we want real imagery, so we skip items whose
+# metadata signals a non-photographic graphic (that's where the Hubble "blueprint"
+# came from).
+_NONPHOTO = (
+    "illustration", "artist concept", "artist's concept", "artists concept",
+    "rendering", "render of", "diagram", "schematic", "infographic", "chart",
+    "concept art", "cutaway", "blueprint", "graphic of", "logo", "poster",
+)
+
+
+def _is_photo(data: dict) -> bool:
+    blob = " ".join([
+        str(data.get("title", "")), str(data.get("description", "")),
+        " ".join(data.get("keywords") or []),
+    ]).lower()
+    return not any(t in blob for t in _NONPHOTO)
+
 
 def _load_used() -> set[str]:
     if _USED_FILE.exists():
@@ -97,6 +115,9 @@ def _fetch(keywords: list[str], dest_dir: Path, media_type: str, max_items: int)
             data = (item.get("data") or [{}])[0]
             nasa_id = data.get("nasa_id")
             if not nasa_id or nasa_id in used:
+                continue
+            # Photos only — skip diagrams / artist's concepts / schematics.
+            if media_type == "image" and not _is_photo(data):
                 continue
             href = _pick_href(_asset_hrefs(nasa_id), exts, prefer)
             if not href:

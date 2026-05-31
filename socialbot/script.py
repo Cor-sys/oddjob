@@ -27,11 +27,20 @@ _SYSTEM = (
     "first 3 seconds. Lead with the single most surprising, concrete fact — no "
     "setup, no throat-clearing, no scene-setting. Never open with 'In this "
     "video', 'Today we', 'Imagine', or the topic title.\n"
-    "- Build like a documentary: each line raises the stakes or deepens the "
-    "mystery, one clear idea at a time, written for the ear.\n"
+    "- BE SPECIFIC, NOT GENERIC. This is the difference between a great script and "
+    "a boring one. Use the real numbers, names, dates, and measurements from the "
+    "facts — concrete detail is what makes it feel real. Banned: vague scale-words "
+    "like 'colossal', 'massive', 'incredible', 'mysterious', 'fascinating' — "
+    "instead state the actual figure or image (not 'a colossal storm' but 'a storm "
+    "wider than Earth').\n"
+    "- Every sentence delivers a NEW concrete fact and escalates. Never restate, "
+    "never pad. Banned empty connective filler: 'but here's the thing', 'what's "
+    "even crazier', 'scientists were stunned', 'little did they know'.\n"
+    "- Write for the ear, like one sharp person telling you something they can't "
+    "believe is true — specific and confident, never a neutral encyclopedia read.\n"
     "- Write a LOOP: the last line lands the point AND flows back into the hook "
     "so a replay feels seamless. No 'thanks for watching' / 'follow for more'.\n"
-    "- No hype words ('insane', 'you won't believe', 'mind-blowing'), no filler, "
+    "- No hype words ('insane', 'you won't believe', 'mind-blowing'), no clickbait, "
     "no clichés, no emoji.\n"
     "- Stay strictly within the provided facts. Never invent numbers, names, or "
     "claims. If unsure, leave it out."
@@ -130,8 +139,9 @@ def _strategy_block() -> str:
 
 def write_script(topic: Topic, seconds: int | None = None, dossier: "Dossier | None" = None) -> Script:
     seconds = seconds or settings.clip_seconds
-    # ~2.6 spoken words/sec is a comfortable narration pace.
-    target_words = int(seconds * 2.6)
+    # edge-tts narrates at ~2.2 spoken words/sec in practice (measured); a higher
+    # estimate makes scripts overrun the target length.
+    target_words = int(seconds * 2.2)
     facts_block, subjects = _facts_block(topic, dossier)
     subjects_line = f"FILMABLE SUBJECTS: {subjects}\n" if subjects else ""
     strategy_block = _strategy_block()
@@ -164,16 +174,35 @@ Return ONLY a JSON object with keys:
     #fyp, or other generic spam tags).
   - "shot_list": an ORDERED list of beats that together cover the WHOLE narration.
     Each beat: {{"text": "<the exact narration segment this shot covers>",
-                 "query": "<a specific visual search phrase for the concrete nouns/scenes in that segment>",
+                 "query": "<a SHORT visual search phrase: 2-5 words, ONE concrete filmable subject>",
                  "kind": "space" | "entity" | "stock"}}.
-    The concatenation of every beat "text" must equal the narration. Use "space"
-    for astronomy/spaceflight visuals, "entity" for a specific named person/place/
-    object, "stock" for generic atmospheric footage. Queries must be SPECIFIC
-    (concrete nouns/scenes), never generic words like "news" or "technology"."""
+    The concatenation of every beat "text" must equal the narration.
+    QUERY RULES (critical — this is what fetches the footage):
+      * 2-5 words naming ONE subject. NEVER a sentence, NEVER a comma-separated list.
+      * Pick subjects that free stock/NASA/Wikimedia libraries actually have. If the
+        exact subject is too niche to have footage (a specific unreleased vehicle,
+        an internal codename), use its filmable GENERIC instead (e.g. "rocket
+        launch", "Earth from orbit", "data center", "ocean splashdown").
+      * Never generic filler ("news", "technology", "background").
+    KIND (controls which library is searched):
+      * "entity" = a specific NAMED person, place, company, craft, or mission
+        (SpaceX, Starship, Voyager, JWST, NASA, a named scientist) -> real photos.
+      * "space"  = generic astronomy with NO specific named craft (planets,
+        galaxies, nebulae, stars, the Sun, Earth from space).
+      * "stock"  = everyday/atmospheric footage (labs, crowds, cities, nature)."""
 
     with costs.track(stage="script"):
         data = json_call(prompt, system=_SYSTEM)
     return _script_from_data(topic, data)
+
+
+def _clean_query(q: str) -> str:
+    """Reduce a beat query to ONE short search phrase: drop everything after the
+    first comma/semicolon and cap at ~6 words. Long multi-clause queries return
+    junk from image search; a tight phrase matches far better."""
+    first = re.split(r"[,;]", q or "")[0].strip()
+    words = first.split()
+    return " ".join(words[:6]) if words else first
 
 
 def _script_from_data(topic: Topic, data: object) -> Script:
@@ -185,6 +214,9 @@ def _script_from_data(topic: Topic, data: object) -> Script:
         for b in data.get("shot_list", [])
         if isinstance(b, dict) and str(b.get("query", "")).strip()
     ]
+    # Tighten any over-written query (e.g. a 4-clause sentence) to a searchable phrase.
+    for b in beats:
+        b.query = _clean_query(b.query) or b.query
     # Router back-compat: broll_keywords = the beat queries (fallback to anything
     # the model or topic gave us so footage fetch never starves).
     keywords = (

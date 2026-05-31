@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -105,12 +106,24 @@ def _search(query: str, limit: int = 8) -> list[dict]:
         return []
 
 
-def _download(url: str, out: Path) -> None:
-    with requests.get(url, headers=_UA, stream=True, timeout=120) as r:
-        r.raise_for_status()
-        with open(out, "wb") as f:
-            for chunk in r.iter_content(chunk_size=1 << 16):
-                f.write(chunk)
+def _download(url: str, out: Path, *, tries: int = 3) -> None:
+    """Download a Commons image, retrying on rate-limit/overload. upload.wikimedia
+    .org throttles bursts (429); a short backoff lets the fetch succeed instead of
+    silently giving up and falling back to NASA."""
+    for attempt in range(tries):
+        try:
+            with requests.get(url, headers=_UA, stream=True, timeout=120) as r:
+                r.raise_for_status()
+                with open(out, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=1 << 16):
+                        f.write(chunk)
+            return
+        except requests.RequestException as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if attempt < tries - 1 and status in (429, 503):
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            raise
 
 
 def fetch_media(keywords: list[str], dest_dir: Path, max_items: int = 6) -> list[Asset]:

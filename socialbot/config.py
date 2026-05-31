@@ -79,7 +79,9 @@ class Settings:
     logo_path: str = field(default_factory=lambda: _env("LOGO_PATH", "assets/oddjob-logo.png"))
     logo_opacity: float = field(default_factory=lambda: float(_env("LOGO_OPACITY", "0.85") or 0.85))
     logo_scale_w: int = field(default_factory=lambda: int(_env("LOGO_SCALE_W", "150") or 150))
-    endcard_seconds: float = field(default_factory=lambda: float(_env("ENDCARD_SECONDS", "1.0") or 1.0))
+    # Length of the full-screen logo outro card; 0 = no outro card (the video
+    # just ends on the last beat). Corner logo bug is controlled by BRANDING_ENABLED.
+    endcard_seconds: float = field(default_factory=lambda: float(_env("ENDCARD_SECONDS", "0") or 0))
     # Music bed (off until a monetization-safe track is dropped in MUSIC_DIR).
     music_enabled: bool = field(default_factory=lambda: _env("MUSIC_ENABLED", "false").lower() == "true")
     music_dir: str = field(default_factory=lambda: _env("MUSIC_DIR", "assets/music"))
