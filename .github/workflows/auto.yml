@@ -60,7 +60,7 @@ jobs:
           FACEBOOK_PAGE_ID:        ${{ secrets.FACEBOOK_PAGE_ID }}
           FACEBOOK_PAGE_TOKEN:     ${{ secrets.FACEBOOK_PAGE_TOKEN }}
           # ── Customizable via GitHub Variables (Settings -> Variables) ──────
-          CONTENT_NICHE:           ${{ vars.CONTENT_NICHE      || 'AI and emerging technology, space and astronomy, UFOs/UAPs and the search for extraterrestrial life' }}
+          CONTENT_NICHE:           ${{ vars.CONTENT_NICHE      || 'space and astronomy (rocket launches and failures, NASA missions, planets, telescopes, cosmic mysteries) plus UFOs/UAPs and the search for extraterrestrial life are the priority; cover AI or tech only when a story has a vivid visual and real stakes, not abstract new-model-or-material explainers' }}
           CONTENT_TONE:            ${{ vars.CONTENT_TONE       || 'a sharp, curious narrator who makes you lean in: vivid, specific, and confident, telling a real story rather than reciting facts; precise and grounded, never hype or clickbait' }}
           CLIP_SECONDS:            ${{ vars.CLIP_SECONDS        || '38' }}
           CLIP_SECONDS_MIN:        ${{ vars.CLIP_SECONDS_MIN    || '30' }}
