@@ -1,0 +1,215 @@
+{
+  "version": 1,
+  "updated_at": "2026-05-31T20:16:52.848675+00:00",
+  "concepts": [
+    {
+      "id": "anthropic-s-ai-valuation-soars-past-openai",
+      "title": "Anthropic's AI Valuation Soars Past OpenAI",
+      "summary": "Anthropic has closed a funding round valuing the company at over $900 billion, making it the world's most valuable private AI startup. This valuation surpasses rival OpenAI's March 2026 valuation, driven by Anthropic's annualized revenue exceeding $30 billion.",
+      "why_trending": "This news is trending as it signifies a major shift in the competitive landscape of the rapidly expanding AI industry.",
+      "keywords": [
+        "Anthropic logo",
+        "OpenAI logo",
+        "stock market ticker",
+        "corporate office",
+        "AI code on screen",
+        "financial graphs"
+      ],
+      "demand": 100.0,
+      "phrasings": [
+        "anthropic logo",
+        "anthropic demo",
+        "anthropic ai",
+        "anthropic google",
+        "#anthropic"
+      ],
+      "score": 5.0,
+      "source": "batch",
+      "first_seen": "2026-05-31T20:16:52.821339+00:00",
+      "last_scored": "2026-05-31T20:16:52.821344+00:00",
+      "used": false,
+      "fingerprint": [
+        "anthropic",
+        "openai",
+        "past",
+        "soars",
+        "valuation"
+      ]
+    },
+    {
+      "id": "us-cities-halt-ai-data-center-construction",
+      "title": "US Cities Halt AI Data Center Construction",
+      "summary": "Multiple US states and municipalities, including Durham, NC, Northampton County, NC, Hill County, TX, and St. Charles, MO, have imposed or advanced moratoriums on AI data center development. These actions reflect growing concerns over resource consumption and local impact.",
+      "why_trending": "The accelerating pace of local government action against AI infrastructure highlights increasing societal and environmental debates around emerging technology.",
+      "keywords": [
+        "data center exterior",
+        "construction site",
+        "city council meeting",
+        "protest signs",
+        "power lines",
+        "water towers"
+      ],
+      "demand": 100.0,
+      "phrasings": [
+        "data center webinar",
+        "data center tiers explained",
+        "data center floor plan",
+        "data center modular",
+        "data center power system design"
+      ],
+      "score": 15.0,
+      "source": "batch",
+      "first_seen": "2026-05-31T20:16:52.821374+00:00",
+      "last_scored": "2026-05-31T20:16:52.821378+00:00",
+      "used": false,
+      "fingerprint": [
+        "center",
+        "cities",
+        "construction",
+        "data",
+        "halt"
+      ]
+    },
+    {
+      "id": "jwst-reveals-exoplanet-s-vanishing-rock-clouds",
+      "title": "JWST Reveals Exoplanet's Vanishing Rock Clouds",
+      "summary": "The James Webb Space Telescope has discovered a giant exoplanet, WASP-94A b, where clouds made of rock-like minerals appear in the morning and completely vanish by nightfall. This finding offers the clearest look yet into the atmosphere of a 'Hot Jupiter' exoplanet.",
+      "why_trending": "This bizarre daily weather cycle on a distant world provides unprecedented insights into exoplanet atmospheres, captivating both scientists and the public.",
+      "keywords": [
+        "WASP-94A b artist's impression",
+        "James Webb Space Telescope",
+        "exoplanet atmosphere visualization",
+        "rock clouds animation",
+        "star field",
+        "telescope imagery"
+      ],
+      "demand": 100.0,
+      "phrasings": [
+        "wasp deluxe jam",
+        "wasp demo 1982",
+        "james webb space telescope",
+        "james webb space telescope images",
+        "james webb space telescope discoveries"
+      ],
+      "score": 95.0,
+      "source": "batch",
+      "first_seen": "2026-05-31T20:16:52.821401+00:00",
+      "last_scored": "2026-05-31T20:16:52.821404+00:00",
+      "used": true,
+      "fingerprint": [
+        "clouds",
+        "exoplanet",
+        "jwst",
+        "reveals",
+        "rock",
+        "vanishing"
+      ]
+    },
+    {
+      "id": "nasa-s-roman-mission-to-discover-100-000-exoplan",
+      "title": "NASA's Roman Mission to Discover 100,000 Exoplanets",
+      "summary": "NASA's upcoming Nancy Grace Roman Space Telescope is poised to discover approximately 100,000 new exoplanets, a massive increase compared to the current 6,300 known. The mission will primarily explore underexplored regions of the Milky Way, revolutionizing our understanding of planetary systems.",
+      "why_trending": "The sheer scale of anticipated discoveries from the Roman mission promises to redefine exoplanet science and our place in the universe.",
+      "keywords": [
+        "Nancy Grace Roman Space Telescope rendering",
+        "artist's impression of exoplanets",
+        "Milky Way galaxy",
+        "star field",
+        "NASA mission control",
+        "astronomer at telescope"
+      ],
+      "demand": 100.0,
+      "phrasings": [
+        "nancy grace roman space telescope",
+        "real pictures of exoplanets",
+        "real images of exoplanets",
+        "images of exoplanets",
+        "milky way galaxy"
+      ],
+      "score": 90.0,
+      "source": "batch",
+      "first_seen": "2026-05-31T20:16:52.821428+00:00",
+      "last_scored": "2026-05-31T20:16:52.821431+00:00",
+      "used": true,
+      "fingerprint": [
+        "000",
+        "100",
+        "discover",
+        "exoplanets",
+        "mission",
+        "nasa",
+        "roman"
+      ]
+    },
+    {
+      "id": "rogue-planet-moons-new-alien-life-hotspots",
+      "title": "Rogue Planet Moons: New Alien Life Hotspots?",
+      "summary": "New research suggests that moons orbiting rogue planets, which wander interstellar space without a host star, could harbor liquid water oceans and potentially alien life. Scientists propose that tidal heating and hydrogen-rich atmospheres could keep these moons warm for billions of years.",
+      "why_trending": "This study expands the potential locations for extraterrestrial life beyond traditional habitable zones, igniting new possibilities for discovery.",
+      "keywords": [
+        "rogue planet with moon artist's impression",
+        "subsurface ocean on icy moon",
+        "interstellar space",
+        "tidal heating visualization",
+        "alien microbial life concept",
+        "astronomy simulation"
+      ],
+      "demand": 100.0,
+      "phrasings": [
+        "rogue planet in our solar system",
+        "interstellar space",
+        "interstellar space sounds",
+        "interstellar space scene",
+        "interstellar space travel"
+      ],
+      "score": 98.0,
+      "source": "batch",
+      "first_seen": "2026-05-31T20:16:52.821455+00:00",
+      "last_scored": "2026-05-31T20:16:52.821458+00:00",
+      "used": true,
+      "fingerprint": [
+        "alien",
+        "hotspots",
+        "life",
+        "moons",
+        "planet",
+        "rogue"
+      ]
+    },
+    {
+      "id": "scientists-warn-we-re-missing-alien-life-signs",
+      "title": "Scientists Warn: We're Missing Alien Life Signs",
+      "summary": "A new study in Nature Astronomy warns that current search strategies for extraterrestrial life may be too narrow, leading to 'false negatives' where existing biosignatures are overlooked or misinterpreted. Researchers advocate for new approaches combining lab experiments, modeling, field research, and AI-supported pattern recognition.",
+      "why_trending": "This critical re-evaluation of astrobiology's methods challenges long-held assumptions and calls for a broader perspective in the search for life beyond Earth.",
+      "keywords": [
+        "Mars rover",
+        "scientists in lab",
+        "microscopic organisms",
+        "alien life concept art",
+        "geological formations",
+        "space mission instruments"
+      ],
+      "demand": 100.0,
+      "phrasings": [
+        "mars rover",
+        "mars rover last words",
+        "mars rover footage",
+        "mars rover last words audio",
+        "mars rover sings happy birthday"
+      ],
+      "score": 70.0,
+      "source": "batch",
+      "first_seen": "2026-05-31T20:16:52.821482+00:00",
+      "last_scored": "2026-05-31T20:16:52.821485+00:00",
+      "used": false,
+      "fingerprint": [
+        "alien",
+        "life",
+        "missing",
+        "scientists",
+        "signs",
+        "warn"
+      ]
+    }
+  ]
+}

@@ -57,8 +57,8 @@ def _run_funnel(*, verdicts: dict, judges: dict, post: int):
         _patch(saved, tournament, "polish", lambda f: None)
         _patch(saved, tournament, "judge",
                lambda survivors: [judges[f.topic.title] for f in survivors])
-        _patch(saved, factcheck, "vet",
-               lambda script: FactCheck(verdict=verdicts[script.topic_title], summary=""))
+        _patch(saved, factcheck, "vet_and_revise",
+               lambda script, topic, **kw: (script, FactCheck(verdict=verdicts[script.topic_title], summary="")))
 
         def _fake_materialize(f):
             return types.SimpleNamespace(id=f"item-{f.topic.title}", meta={})
@@ -115,7 +115,8 @@ def test_run_batch_fills_shortfall_from_reserve():
         _patch(saved, tournament, "develop", lambda topic, seconds=None: fin)
         _patch(saved, tournament, "polish", lambda f: None)
         _patch(saved, tournament, "judge", lambda survivors: [70.0])
-        _patch(saved, factcheck, "vet", lambda script: FactCheck(verdict="needs_review", summary=""))
+        _patch(saved, factcheck, "vet_and_revise",
+               lambda script, topic, **kw: (script, FactCheck(verdict="needs_review", summary="")))
         _patch(saved, tournament, "_materialize",
                lambda f: types.SimpleNamespace(id=f"item-{f.topic.title}", meta={}))
         _patch(saved, tournament.reserve, "bank",
@@ -152,7 +153,8 @@ def test_dry_run_renders_nothing():
         _patch(saved, tournament, "develop", lambda topic, seconds=None: fin)
         _patch(saved, tournament, "polish", lambda f: None)
         _patch(saved, tournament, "judge", lambda survivors: [90.0])
-        _patch(saved, factcheck, "vet", lambda script: FactCheck(verdict="ok", summary=""))
+        _patch(saved, factcheck, "vet_and_revise",
+               lambda script, topic, **kw: (script, FactCheck(verdict="ok", summary="")))
         _patch(saved, tournament, "_materialize",
                lambda f: (_ for _ in ()).throw(AssertionError("must not render in dry run")))
         _patch(saved, tournament.pipeline, "schedule_item",

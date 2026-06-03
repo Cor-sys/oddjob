@@ -102,8 +102,14 @@ class Settings:
     # banked as re-renderable recipes. Sized to fit the free tier (~20 Flash +
     # ~20 Flash-Lite requests/day). See the budget table in the v2 plan.
     posts_per_day: int = field(default_factory=lambda: int(_env("POSTS_PER_DAY", "3") or 3))
-    concepts_n: int = field(default_factory=lambda: int(_env("CONCEPTS_N", "15") or 15))
-    develop_n: int = field(default_factory=lambda: int(_env("DEVELOP_N", "10") or 10))
+    # Per-batch funnel, sized for the split daily schedule (2 small batches/day, see
+    # .github/workflows/auto.yml). Each batch mines a small pool, DEVELOPS a few, and
+    # posts its share — Run A posts 2, Run B posts 1 (= POSTS_PER_DAY total). Mining
+    # is 1 cheap call regardless of count; developing (research + draft) is the cost,
+    # so develop_n is the main cost/footprint dial. 3/batch -> 6 develops/day, best of
+    # 3 posted per batch. Smaller per-run bursts are also less bot-like ("less sus").
+    concepts_n: int = field(default_factory=lambda: int(_env("CONCEPTS_N", "6") or 6))
+    develop_n: int = field(default_factory=lambda: int(_env("DEVELOP_N", "3") or 3))
     # How many top unused concepts from the topic bank to merge into each batch's
     # scoring pool (Phase 4 — strong ideas we didn't have room to make carry over).
     bank_merge_n: int = field(default_factory=lambda: int(_env("BANK_MERGE_N", "5") or 5))

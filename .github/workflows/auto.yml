@@ -1,10 +1,15 @@
 name: auto-post
 
-# v2 daily TOURNAMENT batch. One run/day mines many concepts, develops the
-# strongest, fact-checks the finalists, posts the best `POSTS_PER_DAY`, and banks
-# the rest as re-renderable recipes. The winners upload PRIVATE with a native
-# YouTube `publishAt`, so YouTube auto-publishes them at the staggered times in
-# PUBLISH_TIMES (interpreted in SCHEDULE_TZ, default UTC).
+# v2 TOURNAMENT batches, deliberately SPLIT across the day so we never fire one big
+# periodic burst. Each run mines concepts, develops the strongest, fact-checks the
+# finalists, posts its share, and banks the rest as re-renderable recipes. Winners
+# upload PRIVATE with a native YouTube `publishAt`, so YouTube auto-publishes them at
+# the staggered PUBLISH_TIMES (SCHEDULE_TZ, default UTC) regardless of when we ran.
+#
+# Anti-ban design: a perfectly-periodic daily burst from a datacenter IP is the
+# fingerprint that gets API projects flagged. So we run TWICE/day at non-round times,
+# each delayed by a random 0-15 min jitter (plus GitHub's own cron delay) so the real
+# call-time drifts daily. Run A posts 2, Run B posts 1 (total = POSTS_PER_DAY).
 #
 # Customize without editing this file via GitHub Variables in:
 #   Settings -> Secrets and variables -> Actions -> Variables tab
@@ -14,7 +19,8 @@ name: auto-post
 # Drop a file at data/PAUSED (committed) to pause posting without disabling CI.
 on:
   schedule:
-    - cron: "0 12 * * *"   # one daily batch (12:00 UTC) — posts stagger later via publishAt
+    - cron: "17 13 * * *"   # Run A ~13:17 UTC (+0-15m jitter) -> posts 2
+    - cron: "43 18 * * *"   # Run B ~18:43 UTC (+0-15m jitter) -> posts 1
   workflow_dispatch:
     inputs:
       post:
@@ -54,7 +60,7 @@ jobs:
           FACEBOOK_PAGE_ID:        ${{ secrets.FACEBOOK_PAGE_ID }}
           FACEBOOK_PAGE_TOKEN:     ${{ secrets.FACEBOOK_PAGE_TOKEN }}
           # ── Customizable via GitHub Variables (Settings -> Variables) ──────
-          CONTENT_NICHE:           ${{ vars.CONTENT_NICHE      || 'AI and emerging technology, space and astronomy, UFOs/UAPs and the search for extraterrestrial life' }}
+          CONTENT_NICHE:           ${{ vars.CONTENT_NICHE      || 'space and astronomy (rocket launches and failures, NASA missions, planets, telescopes, cosmic mysteries) plus UFOs/UAPs and the search for extraterrestrial life are the priority; cover AI or tech only when a story has a vivid visual and real stakes, not abstract new-model-or-material explainers' }}
           CONTENT_TONE:            ${{ vars.CONTENT_TONE       || 'a sharp, curious narrator who makes you lean in: vivid, specific, and confident, telling a real story rather than reciting facts; precise and grounded, never hype or clickbait' }}
           CLIP_SECONDS:            ${{ vars.CLIP_SECONDS        || '38' }}
           CLIP_SECONDS_MIN:        ${{ vars.CLIP_SECONDS_MIN    || '30' }}
@@ -90,14 +96,35 @@ jobs:
           FACEBOOK_PAGE_TOKEN=${FACEBOOK_PAGE_TOKEN}
           EOF
 
-      - name: Run the daily tournament batch
+      - name: Run the tournament batch (split + jittered)
         run: |
           if [ -f data/PAUSED ]; then echo "data/PAUSED present — skipping batch."; exit 0; fi
+
+          # Anti-periodicity jitter: drift the real start by 0-15 min so the daily
+          # call-time wanders (GitHub's own cron delay adds more, for free). Kept
+          # small so we don't idle away many private-repo Actions minutes.
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            JITTER=$(( RANDOM % 900 ))
+            echo "Jitter: sleeping ${JITTER}s before the batch (anti-periodicity)."
+            sleep "$JITTER"
+          fi
+
+          # How many to post: an explicit workflow_dispatch input wins; otherwise
+          # split per cron (Run A posts 2, Run B posts 1). A manual run with no input
+          # falls through to POSTS_PER_DAY.
           POST="${{ github.event.inputs.post }}"
+          if [ -z "$POST" ]; then
+            case "${{ github.event.schedule }}" in
+              "17 13 * * *") POST=2 ;;
+              "43 18 * * *") POST=1 ;;
+            esac
+          fi
+
           DRY="${{ github.event.inputs.dry_run }}"
           ARGS=""
           if [ -n "$POST" ]; then ARGS="$ARGS --post $POST"; fi
           if [ "$DRY" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          echo "Running: cli batch $ARGS"
           python -m socialbot.cli batch $ARGS
 
       - name: Persist dedup state + reserve recipes

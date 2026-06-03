@@ -196,6 +196,57 @@ Return ONLY a JSON object with keys:
     return _script_from_data(topic, data)
 
 
+def revise_script(topic: Topic, script: "Script", fc, *, dossier: "Dossier | None" = None,
+                  seconds: int | None = None) -> "Script":
+    """Rewrite a script to fix what the fact-check flagged — WITHOUT lowering the bar.
+
+    Correct contradicted claims to match the verified facts, and DELETE claims that
+    stay unverifiable. Never invents anything new; only fixes or cuts the flagged
+    claims. One Flash call; returns a new Script to be re-vetted. This is the salvage
+    pass behind `factcheck.vet_and_revise`.
+    """
+    seconds = seconds or settings.clip_seconds
+    target_words = int(seconds * 2.2)
+    facts_block, _ = _facts_block(topic, dossier)
+    flagged = [c for c in getattr(fc, "claims", []) if (c.status or "").lower() != "supported"]
+    if flagged:
+        findings = "\n".join(
+            f'  - [{c.status}] "{c.claim}"' + (f" — {c.note}" if c.note else "")
+            for c in flagged
+        )
+    else:
+        findings = f"  - {getattr(fc, 'summary', '') or 'one or more claims could not be verified'}"
+
+    prompt = f"""A fact-checker flagged problems in this short-video narration. Rewrite it to be fully accurate — fix or cut ONLY what was flagged, keep the rest.
+
+ORIGINAL NARRATION:
+\"\"\"{script.narration}\"\"\"
+
+{facts_block}
+
+FACT-CHECK FINDINGS — resolve every one:
+{findings}
+
+How to resolve each:
+  - CONTRADICTED / false: correct it to match the VERIFIED FACTS above. If it can't
+    be made accurate from those facts, DELETE that sentence entirely.
+  - UNVERIFIED / partially supported: DELETE that claim — keep nothing you can't
+    support, and do NOT soften it with "reportedly"/"allegedly". Cut it.
+  - Leave every OTHER sentence essentially as-is. Introduce NO new claim, number, or name.
+  - Preserve the style: a cold-open hook, escalating reveals, and a final line that
+    loops back to the hook. Aim for ~{target_words} words (shorter is fine after cuts).
+
+Return ONLY a JSON object with the SAME keys as a normal script: "narration",
+"hook_candidates" (3, best first), "hook_text" (<=7 words), "on_screen_title"
+(<=6 words), "description", "hashtags" (3-5, no #), and "shot_list" (ordered beats
+whose "text" values concatenate to the new narration; each {{"text","query","kind"}}
+with query = 2-5 words naming ONE filmable subject and kind = "space"|"entity"|"stock")."""
+
+    with costs.track(stage="revise"):
+        data = json_call(prompt, system=_SYSTEM)
+    return _script_from_data(topic, data)
+
+
 def _clean_query(q: str) -> str:
     """Reduce a beat query to ONE short search phrase: drop everything after the
     first comma/semicolon and cap at ~6 words. Long multi-clause queries return

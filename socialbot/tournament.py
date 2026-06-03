@@ -331,13 +331,27 @@ def _materialize(f: Finalist) -> review.Item:
     return item
 
 
+def _upload_private(item: review.Item) -> None:
+    """Upload a winner to YouTube as PRIVATE with no publishAt — it stays private
+    for manual review instead of auto-publishing. Used by `batch --no-schedule`."""
+    from .publish import publish_item
+
+    review.approve(item.id)
+    fresh = review.get(item.id)
+    print(f"  -> uploading {item.id} PRIVATE (no auto-publish)")
+    publish_item(fresh, targets=("youtube",))  # no publish_at -> private, unscheduled
+
+
 # ── the daily batch ──────────────────────────────────────────────────────────
 
-def run_batch(post: int | None = None, *, niche: str | None = None, dry_run: bool = False) -> dict:
+def run_batch(post: int | None = None, *, niche: str | None = None, dry_run: bool = False,
+              schedule: bool = True) -> dict:
     """Run the full tournament. Posts the top `post` winners on staggered native
     YouTube `publishAt` slots, banks the rest as recipes, and tops up any shortfall
     from the reserve. `dry_run` exercises the whole LLM funnel (so you can verify
-    the call budget) but renders/uploads/banks nothing.
+    the call budget) but renders/uploads/banks nothing. With `schedule=False` the
+    winners are uploaded PRIVATE with no publishAt (for manual review) instead of
+    being auto-scheduled, and the reserve top-up is skipped.
 
     NOTE: a dry run still consumes the day's LLM requests — it is a budget probe,
     not a free preview."""
@@ -390,7 +404,8 @@ def run_batch(post: int | None = None, *, niche: str | None = None, dry_run: boo
         for f in finalists:
             with costs.track(topic=f.topic.title) as frun:
                 polish(f)
-                f.factcheck = factcheck.vet(f.script)
+                f.script, f.factcheck = factcheck.vet_and_revise(
+                    f.script, f.topic, dossier=f.dossier, seconds=f.seconds)
             f.cost = _add_costs(f.cost, frun.as_dict())
 
         survivors = [f for f in finalists if f.factcheck.verdict != factcheck.REJECTED]
@@ -428,12 +443,16 @@ def run_batch(post: int | None = None, *, niche: str | None = None, dry_run: boo
             print("[batch] DRY RUN — nothing rendered, uploaded, or banked.")
             return summary
 
-        # Render + schedule the winners on staggered native publishAt slots.
-        slots = pipeline.next_publish_times(post)
+        # Render the winners, then either schedule them (native publishAt) or
+        # upload them PRIVATE for review (schedule=False).
+        slots = pipeline.next_publish_times(post) if schedule else []
         for f in to_post:
             try:
                 item = _materialize(f)
-                pipeline.schedule_item(item, slots[len(summary["posted"])])
+                if schedule:
+                    pipeline.schedule_item(item, slots[len(summary["posted"])])
+                else:
+                    _upload_private(item)
                 summary["posted"].append(item.id)
             except Exception as e:
                 print(f"  !! post failed for {f.script.on_screen_title}: {e}")
@@ -449,7 +468,7 @@ def run_batch(post: int | None = None, *, niche: str | None = None, dry_run: boo
         # few extra so we can skip any recipe that isn't auto-publishable (e.g. a
         # banked needs_review) and still fill the open slots.
         shortfall = post - len(summary["posted"])
-        if shortfall > 0:
+        if shortfall > 0 and schedule:
             candidates = reserve.best(shortfall + 3, exclude=set(summary["banked"]))
             if candidates:
                 print(f"[batch] {shortfall} open slot(s); trying the reserve bank")

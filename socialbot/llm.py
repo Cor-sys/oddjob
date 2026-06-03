@@ -24,10 +24,17 @@ def _client() -> genai.Client:
     return genai.Client(api_key=settings.gemini_api_key)
 
 
-# On a billed tier the failure mode is transient 503/empty, not minute-window
-# rate limits — so retry briefly, then fall back to the next model fast.
-_MAX_TRIES = 2
-_BACKOFF = (3, 8)
+# On a billed tier the failure mode is transient 503/empty under load (Flash-Lite
+# especially soft-fails grounded calls with an empty STOP response when busy), not
+# minute-window rate limits. An empty response bills ~0 output tokens — output is
+# the expensive part — so a couple of quick re-attempts on the cheap model are
+# nearly free and, through a brief blip, keep grounded calls on Flash-Lite instead
+# of falling back to the 6x-pricier Flash. But Flash-Lite under *sustained* load
+# won't recover in a few seconds, so keep retries few and the backoff short: ride
+# out a blip, otherwise drop to the (reliable) Flash fallback fast rather than
+# stalling. Empty responses are nearly free, so leaning on the fallback costs little.
+_MAX_TRIES = 3
+_BACKOFF = (1, 3)  # seconds between retries; clamped if shorter than _MAX_TRIES-1
 
 
 def _model_chain(primary: str) -> list[str]:
@@ -110,7 +117,7 @@ def _generate(contents: str, config: types.GenerateContentConfig, *, model: str 
                     return resp
                 last_err = ValueError(f"empty response [{_empty_reason(resp)}]")
             if attempt < _MAX_TRIES - 1:
-                time.sleep(_BACKOFF[attempt])  # wait out the per-minute limit
+                time.sleep(_BACKOFF[min(attempt, len(_BACKOFF) - 1)])  # ride out the load blip
 
     raise last_err or RuntimeError("Gemini returned no usable response")
 

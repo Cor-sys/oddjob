@@ -252,7 +252,8 @@ def _cmd_batch(args) -> int:
     if pause_file.exists() and not args.dry_run:
         print(f"batch is PAUSED — delete {pause_file} to resume.")
         return 0
-    tournament.run_batch(post=args.post, niche=args.niche, dry_run=args.dry_run)
+    tournament.run_batch(post=args.post, niche=args.niche, dry_run=args.dry_run,
+                         schedule=not args.no_schedule)
     return 0
 
 
@@ -532,6 +533,9 @@ def build_parser() -> argparse.ArgumentParser:
     bt.add_argument("--dry-run", action="store_true",
                     help="run the full funnel + print the plan, but render/upload/bank nothing "
                          "(still spends the day's LLM requests — it's a budget probe)")
+    bt.add_argument("--no-schedule", action="store_true",
+                    help="upload winners PRIVATE with no publishAt (for manual review) instead "
+                         "of auto-scheduling them public")
     bt.set_defaults(func=_cmd_batch)
 
     rs = sub.add_parser("reserve", help="manage the reserve bank of runner-up recipes")
