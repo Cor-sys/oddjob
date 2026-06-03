@@ -37,8 +37,7 @@ def generate_from_topic(topic: Topic, *, seconds: int | None = None, build_video
         script = write_script(topic, seconds, dossier=dossier)
 
         print("  -> fact-checking...")
-        fc = factcheck.vet(script)
-        print(f"     verdict={fc.verdict} ({fc.summary})")
+        script, fc = factcheck.vet_and_revise(script, topic, dossier=dossier, seconds=seconds)
 
         meta = {
             "topic": topic.to_dict(),

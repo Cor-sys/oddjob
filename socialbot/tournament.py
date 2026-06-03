@@ -404,7 +404,8 @@ def run_batch(post: int | None = None, *, niche: str | None = None, dry_run: boo
         for f in finalists:
             with costs.track(topic=f.topic.title) as frun:
                 polish(f)
-                f.factcheck = factcheck.vet(f.script)
+                f.script, f.factcheck = factcheck.vet_and_revise(
+                    f.script, f.topic, dossier=f.dossier, seconds=f.seconds)
             f.cost = _add_costs(f.cost, frun.as_dict())
 
         survivors = [f for f in finalists if f.factcheck.verdict != factcheck.REJECTED]

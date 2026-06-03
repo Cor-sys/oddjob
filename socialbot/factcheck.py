@@ -107,3 +107,40 @@ Return ONLY a JSON object:
         claims=claims,
         sources=sources,
     )
+
+
+_VERDICT_RANK = {REJECTED: 0, NEEDS_REVIEW: 1, OK: 2}
+
+
+def vet_and_revise(script: Script, topic, *, dossier=None, seconds=None) -> tuple[Script, FactCheck]:
+    """Fact-check `script`; if it isn't clean, make ONE rewrite pass that fixes the
+    contradicted claims and strips the unverifiable ones, then re-check. Returns the
+    (possibly revised) ``(script, FactCheck)``.
+
+    The revision is adopted ONLY when it strictly improves the verdict (e.g.
+    rejected -> needs_review/ok, or needs_review -> ok), so the bar never drops —
+    it salvages good topics whose first draft tripped the gate (a garbled number, a
+    stray unverifiable aside) without ever publishing a weaker set of claims. Costs
+    one extra Flash (rewrite) + one grounded (re-check) only when the first vet
+    wasn't already clean.
+    """
+    fc = vet(script)
+    print(f"     verdict={fc.verdict} ({fc.summary})")
+    if fc.verdict == OK:
+        return script, fc
+
+    from .script import revise_script
+    print("  -> fact-check flagged claims; revising + re-checking once...")
+    try:
+        revised = revise_script(topic, script, fc, dossier=dossier, seconds=seconds)
+    except Exception as e:
+        print(f"     [revise] unavailable ({type(e).__name__}); keeping the original")
+        return script, fc
+
+    fc2 = vet(revised)
+    print(f"     re-check verdict={fc2.verdict} ({fc2.summary})")
+    if _VERDICT_RANK.get(fc2.verdict, 0) > _VERDICT_RANK.get(fc.verdict, 0):
+        print("  -> revision improved the verdict; using the revised script")
+        return revised, fc2
+    print("  -> revision didn't improve it; keeping the original")
+    return script, fc
