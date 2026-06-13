@@ -59,6 +59,10 @@ _SUBSTR = {
     "views": ["views"],
     "avg_view_pct": ["average percentage viewed", "average view percentage", "avg view %", "percentage viewed"],
     "avg_view_seconds": ["average view duration", "avg view duration", "view duration"],
+    # YouTube's "Content" export omits the average columns but gives watch-time +
+    # duration, from which retention is derivable (see ingest()).
+    "watch_time_hours": ["watch time (hours)", "watch time"],
+    "duration": ["duration"],
     "ctr": ["click-through rate", "click through rate", "ctr"],
     "likes": ["likes"],
 }
@@ -142,11 +146,25 @@ def ingest(csv_path: str) -> list[dict]:
             i = cols.get(name)
             return raw[i] if i is not None and i < len(raw) else ""
 
+        views = _to_float(cell("views"))
+        pct = _to_float(cell("avg_view_pct"))
+        secs = _to_seconds(cell("avg_view_seconds"))
+        # Derive retention when the export omits the average columns: average view
+        # seconds = total watch time / views; percent viewed = that / duration.
+        if not secs and views:
+            secs = _to_float(cell("watch_time_hours")) * 3600.0 / views
+        if not pct:
+            dur = _to_seconds(cell("duration"))
+            if dur and secs:
+                # Cap at 100%: Shorts loop, so watch-time can exceed length on a
+                # low-view video and inflate the ratio (a small-sample artifact).
+                pct = min(secs / dur * 100.0, 100.0)
+
         out.append({
             "video_id": raw[cols["video_id"]].strip(),
-            "views": _to_float(cell("views")),
-            "avg_view_pct": _to_float(cell("avg_view_pct")),
-            "avg_view_seconds": _to_seconds(cell("avg_view_seconds")),
+            "views": views,
+            "avg_view_pct": round(pct, 2),
+            "avg_view_seconds": round(secs, 2),
             "ctr": _to_float(cell("ctr")),
             "likes": _to_float(cell("likes")),
         })
