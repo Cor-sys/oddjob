@@ -57,10 +57,14 @@ def _today() -> str:
 _EXACT = {"video_id": {"video", "video id", "video_id", "content", "id"}}
 _SUBSTR = {
     "views": ["views"],
+    # "Stayed to watch %" is YouTube's Shorts swipe-past-the-hook metric — bounded
+    # 0-100 and the truest retention signal. Preferred over "% viewed", which loops
+    # inflate past 100 on Shorts (see ingest()).
+    "stayed_pct": ["stayed to watch"],
     "avg_view_pct": ["average percentage viewed", "average view percentage", "avg view %", "percentage viewed"],
     "avg_view_seconds": ["average view duration", "avg view duration", "view duration"],
-    # YouTube's "Content" export omits the average columns but gives watch-time +
-    # duration, from which retention is derivable (see ingest()).
+    # The "Content" export omits the average columns but gives watch-time + duration,
+    # from which view-duration (and a last-resort % viewed) is derivable.
     "watch_time_hours": ["watch time (hours)", "watch time"],
     "duration": ["duration"],
     "ctr": ["click-through rate", "click through rate", "ctr"],
@@ -147,17 +151,16 @@ def ingest(csv_path: str) -> list[dict]:
             return raw[i] if i is not None and i < len(raw) else ""
 
         views = _to_float(cell("views"))
-        pct = _to_float(cell("avg_view_pct"))
+        # Retention signal (0-100). Prefer "Stayed to watch %" (bounded, the real
+        # Shorts hook metric); then YouTube's "% viewed" column; last resort, derive
+        # it from view-duration / length — but that loops past 100 on Shorts, so cap.
+        pct = _to_float(cell("stayed_pct")) or _to_float(cell("avg_view_pct"))
         secs = _to_seconds(cell("avg_view_seconds"))
-        # Derive retention when the export omits the average columns: average view
-        # seconds = total watch time / views; percent viewed = that / duration.
         if not secs and views:
             secs = _to_float(cell("watch_time_hours")) * 3600.0 / views
         if not pct:
             dur = _to_seconds(cell("duration"))
             if dur and secs:
-                # Cap at 100%: Shorts loop, so watch-time can exceed length on a
-                # low-view video and inflate the ratio (a small-sample artifact).
                 pct = min(secs / dur * 100.0, 100.0)
 
         out.append({
