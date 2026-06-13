@@ -7,6 +7,7 @@ NASA-routed topics fall back to Pexels if NASA comes up short.
 """
 from __future__ import annotations
 
+import random
 import re
 from pathlib import Path
 
@@ -84,27 +85,35 @@ def _fetch_for_beat(beat: Beat, space_topic: bool, dest_dir: Path) -> tuple[Path
     kind = (beat.kind or "auto").lower()
     q = beat.query
 
-    # Specific named subject -> Wikimedia Commons (real imagery stock lacks).
+    # 1) Named subject -> Wikimedia Commons (real imagery stock lacks).
     if kind == "entity":
         assets = commons.fetch_media([q], dest_dir / "commons", 1)
         if assets:
             return assets[0].path, assets[0].credit
-        # fall through to space/stock if Commons has nothing usable
+        # fall through to NASA / stock if Commons has nothing usable
 
-    # Astronomy / spaceflight -> NASA public-domain media (great for real
-    # astronomy; named hardware like SpaceX should be tagged "entity" -> Commons).
-    if kind == "space" or (kind in ("auto", "entity") and space_topic):
+    # 2) Space topics: real space imagery (NASA) is on-brand and beats generic
+    #    stock for EVERY beat — including "stock"-tagged ones (that's what fetched
+    #    an airplane for a Mars story). Try the beat's own query, then a space
+    #    fallback (nebula/galaxy/...), and only drop to Pexels if NASA is truly
+    #    empty for this beat.
+    if space_topic:
+        p = _first(nasa.fetch_media([q], dest_dir / "nasa", 1))
+        if p:
+            return p, None
+        p = _first(nasa.fetch_media([random.choice(_SPACE_FALLBACKS)], dest_dir / "nasa", 1))
+        if p:
+            return p, None
+        return _first(stock.fetch_broll([q], dest_dir / "pexels", 1)), None
+
+    # 3) Non-space topics: an explicit "space" beat still tries NASA first.
+    if kind == "space":
         p = _first(nasa.fetch_media([q], dest_dir / "nasa", 1))
         if p:
             return p, None
 
-    # Everything else -> Pexels stock; last-ditch NASA for space topics.
-    p = _first(stock.fetch_broll([q], dest_dir / "pexels", 1))
-    if p:
-        return p, None
-    if space_topic:
-        return _first(nasa.fetch_media([q], dest_dir / "nasa", 1)), None
-    return None, None
+    # 4) Everything else (AI/tech/general) -> Pexels stock.
+    return _first(stock.fetch_broll([q], dest_dir / "pexels", 1)), None
 
 
 def fetch_visuals(topic: Topic, script: Script, dest_dir: Path, max_items: int = 6) -> tuple[list[Path], list[str]]:

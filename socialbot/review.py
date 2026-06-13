@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -116,6 +117,23 @@ def reject(item_id: str, reason: str = "") -> Item:
     return item
 
 
+def _move_dir(src: Path, dest: Path) -> None:
+    """Move a folder, retrying briefly on a Windows file lock (WinError 32).
+
+    The publish step just finished reading clip.mp4 and our data/ dir lives under
+    OneDrive — either can hold a transient handle that blocks the rename for a
+    moment. Retry a few times before giving up so a successful upload isn't lost
+    to bookkeeping that the OS will allow a second later."""
+    for attempt in range(5):
+        try:
+            shutil.move(str(src), str(dest))
+            return
+        except (PermissionError, OSError):
+            if attempt == 4:
+                raise
+            time.sleep(0.5 * (attempt + 1))
+
+
 def mark_published(item: Item, results: dict[str, Any]) -> Item:
     """Record publish results and move the item folder to data/published/."""
     item.meta["publish_results"] = results
@@ -124,6 +142,6 @@ def mark_published(item: Item, results: dict[str, Any]) -> Item:
     if item.dir.resolve() != dest.resolve():
         if dest.exists():
             shutil.rmtree(dest)
-        shutil.move(str(item.dir), str(dest))
+        _move_dir(item.dir, dest)
         item.dir = dest
     return item

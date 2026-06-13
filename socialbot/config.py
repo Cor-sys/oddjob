@@ -114,8 +114,14 @@ class Settings:
     # scoring pool (Phase 4 — strong ideas we didn't have room to make carry over).
     bank_merge_n: int = field(default_factory=lambda: int(_env("BANK_MERGE_N", "5") or 5))
     finalists_n: int = field(default_factory=lambda: int(_env("FINALISTS_N", "4") or 4))
-    # A banked recipe must clear fact-check AND score at/above this judge floor.
-    bank_score_floor: float = field(default_factory=lambda: float(_env("BANK_SCORE_FLOOR", "60") or 60))
+    # Quality gates on the anchored 0-100 judge score (Stage 2 — execution).
+    #  - post_score_floor: a winner must clear this to be POSTED. Below it we fill
+    #    the slot from a stronger reserve recipe, else post fewer (no filler).
+    #  - bank_score_floor: lower bar — worth banking for a future slot even if not
+    #    good enough to post today. A run can raise the post floor from learned
+    #    analytics (strategy.post_floor); see tournament._effective_post_floor.
+    post_score_floor: float = field(default_factory=lambda: float(_env("POST_SCORE_FLOOR", "65") or 65))
+    bank_score_floor: float = field(default_factory=lambda: float(_env("BANK_SCORE_FLOOR", "55") or 55))
     # Soft ceiling on LLM calls in one batch — stop developing new concepts past
     # this so retries never blow the free-tier daily limit.
     batch_call_ceiling: int = field(default_factory=lambda: int(_env("BATCH_CALL_CEILING", "36") or 36))

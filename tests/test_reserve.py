@@ -13,13 +13,21 @@ from pathlib import Path
 
 
 def _redirect_reserve_dir():
-    """Point reserve + review at a fresh tempdir; return it."""
+    """Point reserve + review at a fresh tempdir; isolate coverage's scan dirs +
+    cache too (render_reserve now consults topic_history.is_covered_meta). Returns
+    the reserve tempdir."""
     import socialbot.reserve as reserve
     import socialbot.review as review
+    import socialbot.topic_history as th
 
     tmp = Path(tempfile.mkdtemp())
     reserve.RESERVE_DIR = tmp
     review.RESERVE_DIR = tmp
+    th.PUBLISHED_DIR = Path(tempfile.mkdtemp())
+    th.PENDING_DIR = Path(tempfile.mkdtemp())
+    th.RESERVE_DIR = tmp
+    th._USED_FILE = Path(tempfile.mkdtemp()) / "used_topics.json"
+    th._reset_scan_cache()
     return tmp
 
 
@@ -154,6 +162,40 @@ def test_stale_recipe_is_revetted_and_rejection_blocks_render():
         assert fresh.status == reserve.review.REJECTED
     finally:
         factcheck.vet, pipeline._render = old_vet, old_render
+
+
+def test_render_reserve_skips_already_aired_story():
+    import json
+
+    import socialbot.pipeline as pipeline
+    import socialbot.reserve as reserve
+    import socialbot.topic_history as th
+
+    _redirect_reserve_dir()   # also isolates th.PUBLISHED_DIR/PENDING_DIR to empty tmpdirs
+    item = reserve.bank(_recipe_meta("blue-sky", verdict="ok", score=88))
+
+    # A published artifact for the SAME story — a later batch aired it.
+    d = th.PUBLISHED_DIR / "20260101-000000_aired"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "meta.json").write_text(
+        json.dumps({"topic_title": "blue-sky", "topic": {"keywords": ["sky"]}, "status": "published"}),
+        encoding="utf-8",
+    )
+    th._reset_scan_cache()
+
+    scheduled: list = []
+    old_render, old_sched = pipeline._render, pipeline.schedule_item
+    try:
+        pipeline._render = lambda it, s, t: it.meta.__setitem__("clip", "clip.mp4")
+        pipeline.schedule_item = lambda it, at, **kw: scheduled.append(it.id)
+
+        reserve.render_reserve(item.id, publish_at="2099-01-01T00:00:00Z")
+        assert scheduled == []                     # already aired -> not re-scheduled
+
+        reserve.render_reserve(item.id, publish_at="2099-01-01T00:00:00Z", force=True)
+        assert scheduled == [item.id]              # force bypasses the coverage check
+    finally:
+        pipeline._render, pipeline.schedule_item = old_render, old_sched
 
 
 def _run_all():

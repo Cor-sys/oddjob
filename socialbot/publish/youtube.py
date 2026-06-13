@@ -99,8 +99,18 @@ def upload(
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
 
     response = None
-    while response is None:
-        _, response = request.next_chunk()
+    try:
+        while response is None:
+            _, response = request.next_chunk()
+    finally:
+        # MediaFileUpload opens the clip and never closes it (no public close()).
+        # On Windows that lingering handle locks clip.mp4, so the post-publish
+        # folder move (shutil.move in review.mark_published) fails with
+        # WinError 32. Release it explicitly via the underlying stream.
+        try:
+            media.stream().close()
+        except Exception:
+            pass
 
     vid = response["id"]
 

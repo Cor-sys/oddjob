@@ -121,19 +121,29 @@ def _video_segment(clip: Path, seg_name: str, seg: float, work: Path, start: flo
 
 
 def _image_segment(img: Path, seg_name: str, seg: float, work: Path, zoom_out: bool = False) -> None:
-    """Turn a still image into a slow Ken Burns (pan/zoom) video segment. Reused
-    images alternate zoom-in/zoom-out so a repeat doesn't look like a static hold."""
+    """Turn a still image into a Ken Burns segment using a BLURRED-FILL frame: the
+    WHOLE image is shown (contained, never cropped) over a blurred, darkened,
+    full-frame copy of itself.
+
+    NASA/Wikimedia stills are almost all landscape (16:9) or panoramic (~3:1), so a
+    plain cover-crop to 9:16 keeps only a narrow center strip and slices the subject
+    (and any multi-panel seam shows). Blurred-fill keeps the whole subject visible
+    AND fills the frame — the standard treatment for landscape source in vertical
+    video. Reused images alternate zoom-in/zoom-out so a repeat isn't a static hold."""
     frames = max(2, int(round(seg * FPS)))
-    # Frame-indexed zoom (`on` = output frame) so direction is deterministic.
-    if zoom_out:
-        z = f"max(1.35-0.0012*on,1.0)"
-    else:
-        z = f"min(1.0+0.0012*on,1.35)"
-    # Pre-scale large so the zoom stays crisp.
+    # Gentle, frame-indexed zoom (`on` = output frame, deterministic), capped low so
+    # the contained image stays essentially whole through the beat.
+    z = "max(1.12-0.0012*on,1.0)" if zoom_out else "min(1.0+0.0012*on,1.12)"
+    bw, bh = W * 2, H * 2  # work at 2x so the zoom stays crisp
     vf = (
-        f"scale={W * 2}:{H * 2}:force_original_aspect_ratio=increase,"
-        f"crop={W * 2}:{H * 2},"
-        f"zoompan=z='{z}':d={frames}:"
+        f"split=2[bg][fg];"
+        # background: cover-fill the frame, then blur + darken so the sharp image pops
+        f"[bg]scale={bw}:{bh}:force_original_aspect_ratio=increase,crop={bw}:{bh},"
+        f"gblur=sigma=24,eq=brightness=-0.22[bgb];"
+        # foreground: contain the WHOLE image (nothing cropped), centered on the blur
+        f"[fg]scale={bw}:{bh}:force_original_aspect_ratio=decrease[fgs];"
+        f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2[comp];"
+        f"[comp]zoompan=z='{z}':d={frames}:"
         f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={W}x{H}:fps={FPS},"
         f"setsar=1,format=yuv420p"
     )

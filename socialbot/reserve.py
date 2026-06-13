@@ -114,6 +114,12 @@ def render_reserve(item_id: str, *, publish_at: str | None = None, force: bool =
             verdict = item.meta.get("factcheck", {}).get("verdict")
             print(f"  -> NOT scheduling {item_id}: verdict={verdict} (needs manual review)")
             return item
+        # A recipe was banked before airing; a later batch may have since covered
+        # the same story. Don't re-air a duplicate (unless forced).
+        from . import topic_history
+        if not force and topic_history.is_covered_meta(item.meta):
+            print(f"  -> NOT scheduling {item_id}: story already covered recently")
+            return item
         pipeline.schedule_item(item, publish_at)
     return item
 

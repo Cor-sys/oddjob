@@ -74,4 +74,13 @@ def publish_item(item: review.Item, targets: tuple[str, ...] = TARGETS,
 
     if any("error" not in r for r in results.values()):
         review.mark_published(item, results)
+        # Record the aired story in coverage memory — the one point every publish
+        # path (batch, auto, custom, reserve, promo) funnels through. Derived from
+        # the artifact, so it doesn't matter which path produced it. Best-effort:
+        # bookkeeping must never sink a successful publish.
+        try:
+            from .. import topic_history
+            topic_history.record_meta(item.meta)
+        except Exception as e:
+            print(f"  [coverage] record failed ({type(e).__name__}); continuing")
     return results

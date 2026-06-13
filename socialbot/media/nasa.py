@@ -13,21 +13,27 @@ from pathlib import Path
 import requests
 
 from ..config import DATA_DIR
+from . import quality
 
 _SEARCH = "https://images-api.nasa.gov/search"
 _ASSET = "https://images-api.nasa.gov/asset/{nasa_id}"
 _USED_FILE = DATA_DIR / "used_nasa.json"
 
 _IMG_EXT = (".jpg", ".jpeg", ".png")
+# Cap downloads per keyword so the validate-and-retry loop can't grind.
+_MAX_CANDIDATES = 3
 
 # NASA's library mixes real photography with illustrations, artist's concepts,
-# schematics and charts. For footage we want real imagery, so we skip items whose
-# metadata signals a non-photographic graphic (that's where the Hubble "blueprint"
-# came from).
+# schematics, charts, and VIDEO POSTER/TITLE SLIDES (a credits/storyboard card was
+# how a wall-of-text frame ended up in a clip). For footage we want real imagery,
+# so we skip items whose metadata signals a non-photographic graphic.
 _NONPHOTO = (
     "illustration", "artist concept", "artist's concept", "artists concept",
     "rendering", "render of", "diagram", "schematic", "infographic", "chart",
     "concept art", "cutaway", "blueprint", "graphic of", "logo", "poster",
+    # video poster / slide / non-imagery signals
+    "animation", "storyboard", "contact sheet", "title card", "caption",
+    "runtime", "presentation", "screenshot", "screen capture",
 )
 
 
@@ -111,26 +117,38 @@ def _fetch(keywords: list[str], dest_dir: Path, media_type: str, max_items: int)
             break
         items = _search(kw, media_type)
         random.shuffle(items)  # vary which on-topic result we use
+        tried = 0
         for item in items:
+            if tried >= _MAX_CANDIDATES:
+                break
             data = (item.get("data") or [{}])[0]
             nasa_id = data.get("nasa_id")
             if not nasa_id or nasa_id in used:
                 continue
-            # Photos only — skip diagrams / artist's concepts / schematics.
+            # Photos only — skip diagrams / artist's concepts / schematics / slides.
             if media_type == "image" and not _is_photo(data):
                 continue
             href = _pick_href(_asset_hrefs(nasa_id), exts, prefer)
             if not href:
                 continue
             out = dest_dir / f"nasa_{nasa_id}.{suffix}"
+            tried += 1
             try:
                 _download(href, out)
             except requests.RequestException as e:
                 print(f"  [nasa] download failed for {nasa_id}: {e}")
                 continue
+            # Skip degenerate frames (near-black/blown/solid); a slide that slips
+            # the metadata filter is usually caught here too. Remember the id so we
+            # don't re-fetch the same junk on a later run.
+            if not quality.usable(out):
+                print(f"  [nasa] skipping low-quality asset {nasa_id}")
+                out.unlink(missing_ok=True)
+                used.add(nasa_id)
+                continue
             paths.append(out)
             used.add(nasa_id)
-            break  # one clip per keyword for topical variety
+            break  # one usable clip per keyword for topical variety
 
     _save_used(used)
     return paths

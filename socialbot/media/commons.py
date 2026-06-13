@@ -18,6 +18,7 @@ from pathlib import Path
 import requests
 
 from ..config import DATA_DIR
+from . import quality
 
 _API = "https://commons.wikimedia.org/w/api.php"
 _USED_FILE = DATA_DIR / "used_commons.json"
@@ -202,6 +203,12 @@ def fetch_media(keywords: list[str], dest_dir: Path, max_items: int = 6) -> list
                     break
                 continue
             throttled = 0  # a success means we're not blocked; reset the breaker
+            # Skip degenerate images (near-black/blown/solid); try the next result.
+            if not quality.usable(out):
+                print(f"  [commons] skipping low-quality image {title}")
+                out.unlink(missing_ok=True)
+                used.add(title)
+                continue
             assets.append(Asset(path=out, credit=_credit(title, extmet)))
             used.add(title)
             break  # one per keyword for topical variety

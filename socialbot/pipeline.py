@@ -210,7 +210,8 @@ def generate(count: int = 3, *, niche: str | None = None, seconds: int | None = 
     """Discover trending topics and generate a review item for each."""
     print(f"Discovering {count} trending topics...")
     # Over-fetch a small buffer so topic-dedup doesn't starve the batch below target.
-    topics = discover(count=count + 2, niche=niche)
+    # Feed recently-covered titles in so the model avoids them at the source.
+    topics = discover(count=count + 2, niche=niche, avoid=topic_history.recent_titles())
     if not topics:
         print("No topics found.")
         return []
@@ -296,6 +297,13 @@ def auto_run_custom_topic(topic: Topic, *, targets: tuple[str, ...] = ("youtube"
     'needs_review' result still publishes — the user provided the content, so
     unverifiable claims are expected and trusted by default."""
     from .publish import publish_item
+
+    # User-provided topic: never block on overlap (they asked for it), but flag it
+    # so a duplicate isn't a silent surprise. The airing is still recorded via the
+    # publish-time coverage hook.
+    if topic_history.is_covered_meta({"topic_title": topic.title, "topic": topic.to_dict()}):
+        print(f"  [coverage] note: '{topic.title}' overlaps a previously covered "
+              "story — proceeding (user-provided).")
 
     it = generate_from_topic(topic)
     verdict = it.meta.get("factcheck", {}).get("verdict")

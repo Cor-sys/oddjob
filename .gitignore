@@ -22,8 +22,16 @@ data/auto.log
 # The spend ledger stays LOCAL — it accumulates video IDs + costs and we don't
 # want it published. View it locally with `python -m socialbot.cli costs`.
 data/costs.jsonl
-# NOTE: data/used_*.json and data/last_voice.txt ARE tracked (harmless footage
-# IDs / voice name) so the cloud job can persist dedup state between runs.
+# Dedup memory (covered topics, used footage IDs, last voice). Kept LOCAL and
+# untracked: it's live, ever-growing state, so tracking it made every run a dirty
+# working tree — and a stray `git restore data/` would silently wipe the memory
+# and let the engine re-make a story it already covered (it did: the ISS leak).
+# Persisting it across machines/CI is a separate concern (artifact cache, not git).
+data/used_topics.json
+data/used_broll.json
+data/used_commons.json
+data/used_nasa.json
+data/last_voice.txt
 
 # Local editor/agent settings
 .claude/settings.local.json

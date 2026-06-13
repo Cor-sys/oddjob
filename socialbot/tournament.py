@@ -40,10 +40,32 @@ _SCORE_SYSTEM = (
 
 _JUDGE_SYSTEM = (
     "You are a sharp short-form video editor choosing which finished mini-doc "
-    "scripts will perform best as YouTube Shorts. You judge on hook strength, "
-    "escalation, payoff, clarity and rewatchability. You reply with ONLY the "
-    "requested JSON — never prose."
+    "scripts will perform best as YouTube Shorts. You grade execution against a "
+    "fixed, calibrated rubric — not a vibe — and reply with ONLY the requested "
+    "JSON, never prose."
 )
+
+# Shared anchor scale so a score means the same thing every run (calibration is the
+# whole point — an unanchored 0-100 drifts run-to-run and a quality floor can't bite).
+_ANCHORS = (
+    "Score each dimension 0-100 on this ABSOLUTE scale — be calibrated, don't grade "
+    "on a curve:\n"
+    "  90-100 = exceptional, best-in-class\n"
+    "  70-85  = strong, clearly works\n"
+    "  55-69  = solid but unremarkable\n"
+    "  40-54  = weak / generic\n"
+    "  0-39   = broken or a non-starter\n"
+    "Most real candidates land 45-75; reserve 85+ for genuinely exceptional."
+)
+
+# Stage 1 (concept) grades the IDEA's editorial potential; showability/demand are
+# handled deterministically (footage_affinity x cluster_weight + the demand hint),
+# so they're deliberately NOT in this rubric (no double-counting).
+_CONCEPT_DIMS = {"hook_potential": 0.40, "depth": 0.35, "payoff": 0.25}
+# Stage 2 (judge) grades the finished script's EXECUTION against the same bar the
+# writer was told to hit (see script._SYSTEM).
+_JUDGE_DIMS = {"hook": 0.30, "escalation": 0.25, "specificity": 0.20,
+               "payoff_loop": 0.15, "filmability": 0.10}
 
 
 @dataclass
@@ -54,6 +76,7 @@ class Finalist:
     seconds: int = 0
     concept_score: float = _NEUTRAL
     judge_score: float = 0.0
+    judge_subscores: dict = field(default_factory=dict)
     factcheck: "factcheck.FactCheck | None" = None
     cost: dict = field(default_factory=lambda: _ZERO_COST.copy())
 
@@ -69,6 +92,84 @@ def _add_costs(a: dict, b: dict) -> dict:
         "output_tokens": int(a.get("output_tokens", 0)) + int(b.get("output_tokens", 0)),
         "llm_calls": int(a.get("llm_calls", 0)) + int(b.get("llm_calls", 0)),
     }
+
+
+def _directives_block() -> str:
+    """Learned directives (Phase 5) injected into BOTH graders so they reward what
+    actually retains on this channel. Empty until analytics have been ingested —
+    a no-op today, live the moment `cli analytics` writes a strategy."""
+    try:
+        directives = analytics.load_strategy().get("directives") or []
+    except Exception:
+        return ""
+    if not directives:
+        return ""
+    lines = "\n".join(f"  - {d}" for d in directives[:6])
+    return ("\nWHAT RETAINS ON THIS CHANNEL (learned from our own analytics — reward, "
+            "all else equal, candidates that do these):\n" + lines + "\n")
+
+
+def _grade_items(data: object) -> list:
+    """Pull the per-candidate dicts out of a grading reply, tolerating the shapes
+    models actually return: {"scores":[...]}, {"rankings":[...]}, a bare list, or a
+    {"1":{...},"2":{...}} / {"1":80} index map."""
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        items = data.get("scores") or data.get("rankings") or data.get("items")
+        if items:
+            return items
+        out = []
+        for k, v in data.items():
+            try:
+                idx = int(k)
+            except (TypeError, ValueError):
+                continue
+            if isinstance(v, dict):
+                v = {**v, "index": v.get("index", idx)}
+            else:
+                v = {"index": idx, "score": v}
+            out.append(v)
+        return out
+    return []
+
+
+def _parse_graded(data: object, count: int, weights: dict[str, float]) -> list[tuple[float, dict]]:
+    """Parse an anchored grading reply into per-candidate (total, subscores), aligned
+    to the 1-based indices we asked the model to grade.
+
+    The TOTAL is computed in code as the weighted mean of the per-dimension subscores
+    (the model's freeform 'score', if any, is ignored) so the scale stays consistent
+    run-to-run. Missing dimensions fall back to neutral; a reply with no subscores at
+    all falls back to a flat 'score' field, else neutral."""
+    results: list[tuple[float, dict]] = [(_NEUTRAL, {}) for _ in range(count)]
+    for it in _grade_items(data):
+        if not isinstance(it, dict):
+            continue
+        try:
+            i = int(it.get("index")) - 1
+        except (TypeError, ValueError):
+            continue
+        if not (0 <= i < count):
+            continue
+        subs: dict[str, float] = {}
+        for dim in weights:
+            v = it.get(dim)
+            if v is None:
+                continue
+            try:
+                subs[dim] = max(0.0, min(100.0, float(v)))
+            except (TypeError, ValueError):
+                pass
+        if subs:
+            total = round(sum(subs.get(d, _NEUTRAL) * w for d, w in weights.items()), 1)
+        else:
+            try:
+                total = float(it.get("score", _NEUTRAL))
+            except (TypeError, ValueError):
+                total = _NEUTRAL
+        results[i] = (total, subs)
+    return results
 
 
 def _parse_scores(data: object, count: int) -> list[float]:
@@ -107,21 +208,27 @@ def _parse_scores(data: object, count: int) -> list[float]:
 # ── funnel stages ─────────────────────────────────────────────────────────────
 
 def concepts(n: int | None = None, *, niche: str | None = None) -> list[Topic]:
-    """Mine `n` fresh, on-niche concepts (one grounded discover call)."""
+    """Mine `n` fresh, on-niche concepts (one grounded discover call). Recently-
+    covered story titles are fed into discovery so the model avoids them up front."""
     n = n or settings.concepts_n
-    topics = discover(count=n + 2, niche=niche)
+    topics = discover(count=n + 2, niche=niche, avoid=topic_history.recent_titles())
     return topic_history.filter_new(topics)[:n]
 
 
 def _dedup_topics(topics: list[Topic]) -> list[Topic]:
-    """Drop near-duplicate titles within a pool (same logic as topic_history)."""
+    """Drop near-duplicate stories within a pool (same story-key logic as
+    topic_history's cross-run dedup, so a fresh concept and a carried-over bank
+    concept about the same event collapse to one)."""
     seen: list[set[str]] = []
     out: list[Topic] = []
     for t in topics:
-        fp = topic_history._fingerprint(t.title)
-        if fp and any(topic_history._similar(fp, prev) for prev in seen):
+        key = topic_history._topic_key(t)
+        if key and any(
+            topic_history._similar(key, prev, threshold=topic_history._STORY_SIMILARITY)
+            for prev in seen
+        ):
             continue
-        seen.append(fp)
+        seen.append(key)
         out.append(t)
     return out
 
@@ -158,27 +265,30 @@ def score_concepts(topics: list[Topic], keep: int | None = None) -> list[tuple[T
         f"{i}. {t.title} — {t.summary} (search demand: {int(getattr(t, 'demand', 0) or 0)}/100)"
         for i, t in enumerate(pool, 1)
     )
-    prompt = f"""Score each candidate 0-100 on its potential as a 30-45 second,
-retention-optimized mini-documentary Short.
+    prompt = f"""Grade each candidate as a 30-45 second retention-optimized mini-documentary
+Short. Judge the IDEA's potential ONLY — the script isn't written yet, so don't grade
+prose; grade whether a great script COULD be built from this.
 
-Reward: a specific, surprising, under-told angle; enough real depth to sustain 40
-seconds; evergreen curiosity; genuine audience demand (the search-demand hint
-reflects real YouTube autocomplete interest); and — heavily — FOOTAGE
-AVAILABILITY: topics we can actually show with free archives (space/astronomy via
-NASA; famous named people, places, missions, machines via Wikimedia; concrete
-real-world scenes). Penalize hard: abstract or purely-conceptual angles (policy,
-economics, regulation, debates, valuations) that only yield generic stock footage,
-plus broad/generic headlines and thin opinion topics.
+{_ANCHORS}
 
+Score each candidate on these dimensions (0-100 each):
+  - hook_potential: is there a specific, scroll-stopping, curiosity-gap angle a first
+    sentence could open on? Broad/generic headlines and thin opinion score low.
+  - depth: enough concrete, specific material (real numbers, names, events) to sustain
+    ~40 seconds of escalating reveals — not one thin fact stretched across the clip?
+  - payoff: is there a satisfying "wait, what?" resolution the video can land on?
+
+The search-demand hint reflects real YouTube autocomplete interest — let it nudge ties.
+{_directives_block()}
 CANDIDATES:
 {listing}
 
-Return ONLY JSON covering EVERY candidate:
-{{"scores":[{{"index":<1-based number above>,"score":<0-100>,"reason":"<=12 words"}}]}}"""
+Return ONLY JSON covering EVERY candidate by its number:
+{{"scores":[{{"index":<n>,"hook_potential":<0-100>,"depth":<0-100>,"payoff":<0-100>,"reason":"<=12 words"}}]}}"""
 
     with costs.track(stage="batch_score"):
         data = json_call(prompt, system=_SCORE_SYSTEM, model=settings.gemini_calls_model)
-    scores = _parse_scores(data, len(pool))
+    scores = [total for total, _subs in _parse_graded(data, len(pool), _CONCEPT_DIMS)]
 
     # Bias SELECTION by the learned strategy's topic-cluster weights (Phase 5),
     # but persist the RAW scores to the bank so the steer is re-applied each run.
@@ -268,28 +378,48 @@ Return ONLY a JSON object with these keys:
         f.script = new
 
 
-def judge(finalists: list[Finalist]) -> list[float]:
-    """Rank the finalists in ONE Flash call; returns a score per finalist."""
+def judge(finalists: list[Finalist]) -> list[tuple[float, dict]]:
+    """Grade the finished scripts in ONE Flash call against the anchored EXECUTION
+    rubric; returns (weighted_total, subscores) per finalist, aligned to input order.
+    The total is computed in code from the subscores so the scale stays consistent."""
     if not finalists:
         return []
     blocks = []
     for i, f in enumerate(finalists, 1):
         hook = f.script.hook_candidates[0] if f.script.hook_candidates else f.script.hook_text
-        blocks.append(f"[{i}] HOOK: {hook}\nNARRATION: {f.script.narration[:400]}")
+        shots = ", ".join(b.query for b in f.script.shot_list[:8]) or "(none)"
+        # FULL narration — the payoff/loop is the LAST line, so truncating it blinds
+        # the judge to the payoff_loop dimension (it scores ~0). A 30-45s script is
+        # only ~90 words; cap generously just to bound a pathological outlier.
+        blocks.append(
+            f"[{i}] HOOK: {hook}\nNARRATION: {f.script.narration[:1500]}\nSHOTS: {shots}"
+        )
     listing = "\n\n".join(blocks)
-    prompt = f"""Judge these finished mini-doc scripts on how well they will
-perform as YouTube Shorts (hook strength, escalation, payoff/loop, clarity,
-rewatchability). Score each 0-100.
+    prompt = f"""Grade these finished mini-doc scripts on EXECUTION as YouTube Shorts.
 
+{_ANCHORS}
+
+Score each script on these dimensions (0-100 each):
+  - hook: does the FIRST sentence stop the scroll in ~3 seconds with a concrete,
+    surprising fact? Penalize setup, scene-setting, or restating the title.
+  - escalation: does every line deliver a NEW concrete fact and build? Penalize
+    restating, padding, and empty connective filler.
+  - specificity: real numbers/names/measurements vs vague scale-words ("colossal",
+    "mysterious", "incredible")?
+  - payoff_loop: does the LAST line land the point AND loop back into the hook so a
+    replay feels seamless?
+  - filmability: do the SHOTS name concrete subjects free archives can actually show
+    (named people/places/craft, or showable generics) vs abstract concepts?
+{_directives_block()}
 SCRIPTS:
 {listing}
 
-Return ONLY JSON covering EVERY script:
-{{"rankings":[{{"index":<1-based number above>,"score":<0-100>,"reason":"<=12 words"}}]}}"""
+Return ONLY JSON covering EVERY script by its number:
+{{"rankings":[{{"index":<n>,"hook":<0-100>,"escalation":<0-100>,"specificity":<0-100>,"payoff_loop":<0-100>,"filmability":<0-100>,"reason":"<=12 words"}}]}}"""
 
     with costs.track(stage="judge"):
         data = json_call(prompt, system=_JUDGE_SYSTEM)
-    return _parse_scores(data, len(finalists))
+    return _parse_graded(data, len(finalists), _JUDGE_DIMS)
 
 
 # ── meta / publish gate ─────────────────────────────────────────────────────────
@@ -308,6 +438,9 @@ def _finalist_meta(f: Finalist, *, status: str) -> dict:
         "clip_seconds": f.seconds,
         "concept_score": round(f.concept_score, 1),
         "judge_score": round(f.judge_score, 1),
+        # Per-dimension execution grades — kept so the analytics loop can later
+        # correlate which grading dimensions actually predict retention.
+        "judge_subscores": {k: round(v, 1) for k, v in (f.judge_subscores or {}).items()},
         "generation_cost": f.cost,
         # Partial arm (voice is filled in at render); lets banked recipes carry
         # their experiment attribution even before they're rendered.
@@ -340,6 +473,26 @@ def _upload_private(item: review.Item) -> None:
     fresh = review.get(item.id)
     print(f"  -> uploading {item.id} PRIVATE (no auto-publish)")
     publish_item(fresh, targets=("youtube",))  # no publish_at -> private, unscheduled
+
+
+def _fmt_subs(subs: dict) -> str:
+    """Compact one-line view of the judge subscores, e.g. '(hook 90 esca 80 ...)',
+    so a batch run shows WHY a script scored what it did."""
+    if not subs:
+        return ""
+    return "  (" + " ".join(f"{k[:4]} {int(round(v))}" for k, v in subs.items()) + ")"
+
+
+def _effective_post_floor(strategy: dict | None) -> float:
+    """The posting quality bar (anchored judge-score units): the configured floor,
+    raised by any learned floor the analytics loop has set (strategy.post_floor).
+    A fresh winner must clear this to be posted."""
+    base = settings.post_score_floor
+    try:
+        learned = float((strategy or {}).get("post_floor", 0) or 0)
+    except (TypeError, ValueError):
+        learned = 0.0
+    return max(base, learned)
 
 
 # ── the daily batch ──────────────────────────────────────────────────────────
@@ -415,15 +568,25 @@ def run_batch(post: int | None = None, *, niche: str | None = None, dry_run: boo
             summary["calls"], summary["cost_usd"] = run.llm_calls, round(run.cost_usd, 6)
             return summary
 
-        for f, s in zip(survivors, judge(survivors)):
-            f.judge_score = s
+        for f, (total, subs) in zip(survivors, judge(survivors)):
+            f.judge_score = total
+            f.judge_subscores = subs
         survivors.sort(key=lambda f: f.judge_score, reverse=True)
 
-        postable = [f for f in survivors if _publishable(f)]
+        # Quality floor: a fresh winner must clear the bar to be POSTED. Below it we
+        # don't ship filler — we fill from the reserve or post fewer.
+        floor = _effective_post_floor(strategy)
+        publishable = [f for f in survivors if _publishable(f)]   # fact-check gate
+        postable = [f for f in publishable if f.judge_score >= floor]
         to_post = postable[:post]
         chosen = {id(f) for f in to_post}
         to_bank = [f for f in survivors
                    if id(f) not in chosen and f.judge_score >= settings.bank_score_floor]
+        blocked = [f for f in publishable if f.judge_score < floor]
+        # Manual-review mode (--no-schedule): if nothing clears the bar, still surface
+        # the single best survivor for review, clearly flagged.
+        below_floor_review = (publishable[0] if publishable and not postable
+                              and not schedule else None)
 
         summary["calls"] = run.llm_calls
         summary["cost_usd"] = round(run.cost_usd, 6)
@@ -431,11 +594,14 @@ def run_batch(post: int | None = None, *, niche: str | None = None, dry_run: boo
         print(f"\n[batch] funnel: {len(topics)} -> {len(scored)} -> {len(finalists)} finalists "
               f"-> {len(survivors)} survived fact-check")
         print(f"[batch] plan: post {len(to_post)}, bank {len(to_bank)}  "
-              f"(used {run.llm_calls} LLM calls, ~${run.cost_usd:.4f})")
+              f"(quality floor {floor:.0f}; used {run.llm_calls} LLM calls, ~${run.cost_usd:.4f})")
         for f in to_post:
-            print(f"   POST  [{f.judge_score:5.1f}] {f.script.on_screen_title}")
+            print(f"   POST  [{f.judge_score:5.1f}] {f.script.on_screen_title}{_fmt_subs(f.judge_subscores)}")
         for f in to_bank:
-            print(f"   BANK  [{f.judge_score:5.1f}] {f.script.on_screen_title}")
+            print(f"   BANK  [{f.judge_score:5.1f}] {f.script.on_screen_title}{_fmt_subs(f.judge_subscores)}")
+        for f in blocked:
+            print(f"   below [{f.judge_score:5.1f}] {f.script.on_screen_title}"
+                  f"{_fmt_subs(f.judge_subscores)} (under floor {floor:.0f})")
 
         if dry_run:
             summary["posted"] = [f.script.on_screen_title for f in to_post]
@@ -457,12 +623,34 @@ def run_batch(post: int | None = None, *, niche: str | None = None, dry_run: boo
             except Exception as e:
                 print(f"  !! post failed for {f.script.on_screen_title}: {e}")
 
+        # Manual-review mode with nothing above the bar: upload the single best
+        # survivor for REVIEW ONLY (flagged) so you can still see what the funnel
+        # produced and judge it yourself.
+        if below_floor_review is not None and not summary["posted"]:
+            f = below_floor_review
+            print(f"  -> nothing cleared the quality floor ({floor:.0f}); uploading the "
+                  f"best [{f.judge_score:.1f}] for REVIEW ONLY: {f.script.on_screen_title}")
+            try:
+                item = _materialize(f)
+                _upload_private(item)
+                summary["posted"].append(item.id)
+                summary["below_floor_review"] = item.id
+            except Exception as e:
+                print(f"  !! review upload failed for {f.script.on_screen_title}: {e}")
+
+        # Record posted stories now (before the reserve top-up) so the reserve
+        # fill's coverage check won't re-air a story this batch just posted.
+        topic_history.remember([f.topic for f in to_post])
+
         for f in to_bank:
             try:
                 it = reserve.bank(_finalist_meta(f, status=review.RESERVE))
                 summary["banked"].append(it.id)
             except Exception as e:
                 print(f"  !! bank failed for {f.script.on_screen_title}: {e}")
+        # Banked recipes haven't aired and won't hit the publish-time record hook,
+        # so remember them here too.
+        topic_history.remember([f.topic for f in to_bank])
 
         # Top up any shortfall from the reserve bank (0 LLM calls). Over-pull a
         # few extra so we can skip any recipe that isn't auto-publishable (e.g. a
@@ -475,6 +663,15 @@ def run_batch(post: int | None = None, *, niche: str | None = None, dry_run: boo
             for recipe in candidates:
                 if len(summary["posted"]) >= post:
                     break
+                # The reserve is the cadence net of pre-vetted runners-up: require the
+                # recipe to still clear the BANK floor (the strict post floor is for
+                # fresh winners; a vetted runner-up is the intended gap-filler).
+                try:
+                    rscore = float(recipe.meta.get("judge_score", 0) or 0)
+                except (TypeError, ValueError):
+                    rscore = 0.0
+                if rscore < settings.bank_score_floor:
+                    continue
                 if not pipeline._publishable_verdict(recipe.meta):
                     continue  # can't auto-publish this one — leave it banked
                 try:
@@ -483,7 +680,12 @@ def run_batch(post: int | None = None, *, niche: str | None = None, dry_run: boo
                 except Exception as e:
                     print(f"  !! reserve fill failed for {recipe.id}: {e}")
 
-        # Remember what we actually used so future runs don't repeat these stories.
-        topic_history.remember([f.topic for f in to_post] + [f.topic for f in to_bank])
+        # Post fewer, not filler: flag any slots we deliberately left empty.
+        unfilled = post - len(summary["posted"])
+        if unfilled > 0 and schedule:
+            print(f"[batch] {unfilled} slot(s) left unfilled - nothing cleared the quality "
+                  f"floor ({floor:.0f}) and the reserve couldn't fill them; posting fewer "
+                  "rather than filler.")
+
         print(f"[batch] done: posted {len(summary['posted'])}, banked {len(summary['banked'])}.")
         return summary

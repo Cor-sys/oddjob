@@ -54,10 +54,29 @@ def _as_keywords(value) -> list[str]:
     return [str(k).strip() for k in value if str(k).strip()]
 
 
-def discover(count: int = 5, niche: str | None = None) -> list[Topic]:
-    """Return up to `count` trending topics, optionally biased to a niche."""
+def discover(count: int = 5, niche: str | None = None, *,
+             avoid: list[str] | None = None) -> list[Topic]:
+    """Return up to `count` trending topics, optionally biased to a niche.
+
+    `avoid` is a list of recently-covered story titles; they're folded into the
+    prompt so the model steers clear of the same story (even reworded) at the
+    source — cheaper and more semantic than filtering its output afterward."""
     niche = (niche if niche is not None else settings.content_niche).strip()
     focus = f"Focus on this niche/area: {niche}." if niche else "General trending news."
+
+    avoid_block = ""
+    if avoid:
+        # one title per line: collapse internal whitespace/newlines, cap length+count.
+        lines = "\n".join(
+            f"  - {' '.join(t.split())[:120]}" for t in avoid[:30] if t and t.strip()
+        )
+        if lines:
+            avoid_block = (
+                "\n\nAVOID these stories and any close re-tellings — we have already "
+                "covered them. Do not resurface the same underlying event even if "
+                "reworded, re-angled, or attributed to a different person/agency:\n"
+                + lines
+            )
 
     prompt = f"""Using up-to-date web search, find {count} stories worth a short video,
 trending in the last 24-48 hours. {focus}
@@ -74,12 +93,16 @@ For each story return an object with:
   - "summary": 2-3 factual sentences with the concrete details that make it interesting
   - "why_trending": one sentence on why it's hot right now
   - "keywords": 4-6 SPECIFIC visual b-roll search terms (concrete nouns/scenes,
-    not generic words like "news" or "technology")
+    not generic words like "news" or "technology"){avoid_block}
 
 Return ONLY a JSON array of these objects. No prose, no markdown."""
 
+    # Trend discovery is the heaviest grounded ask (search + 6 structured items)
+    # and seeds the whole funnel, so run it on Flash: Flash-Lite empty-STOPs here
+    # and falls back to Flash anyway, just slower. Fact-check grounding stays on
+    # the cheap Flash-Lite lane (see llm.grounded).
     with costs.track(stage="trends"):
-        data, sources = grounded_json(prompt, system=_SYSTEM)
+        data, sources = grounded_json(prompt, system=_SYSTEM, model=settings.gemini_model)
     if isinstance(data, dict):
         data = data.get("topics") or next(
             (v for v in data.values() if isinstance(v, list)), []

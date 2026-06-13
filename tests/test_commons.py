@@ -99,6 +99,47 @@ def test_align_beats_clamps_when_beats_overrun_words():
     assert spans == [(0.0, 1.0)]  # clamps to the last available word
 
 
+def test_fetch_media_skips_low_quality_and_retries():
+    from socialbot.media import commons, quality
+
+    pages = [
+        {"title": "File:Bad.jpg", "imageinfo": [{
+            "mime": "image/jpeg", "thumburl": "http://x/bad.jpg",
+            "extmetadata": {"LicenseShortName": {"value": "CC BY-SA 4.0"}}}]},
+        {"title": "File:Good.jpg", "imageinfo": [{
+            "mime": "image/jpeg", "thumburl": "http://x/good.jpg",
+            "extmetadata": {"LicenseShortName": {"value": "CC0"}}}]},
+    ]
+    commons._search = lambda q, limit=8: pages
+    commons._USED_FILE = Path(tempfile.mkdtemp()) / "used_commons.json"
+
+    downloaded: list[str] = []
+
+    def _fake_dl(url, out, **kw):
+        Path(out).write_bytes(b"\xff\xd8\xff")
+        downloaded.append(url)
+
+    commons._download = _fake_dl
+
+    # Reject the first downloaded image, accept the second.
+    seen = {"n": 0}
+
+    def _fake_usable(p):
+        seen["n"] += 1
+        return seen["n"] > 1
+
+    old_usable = quality.usable
+    quality.usable = _fake_usable
+    try:
+        assets = commons.fetch_media(["x"], Path(tempfile.mkdtemp()), max_items=1)
+    finally:
+        quality.usable = old_usable
+
+    assert downloaded == ["http://x/bad.jpg", "http://x/good.jpg"]  # tried bad, then good
+    assert len(assets) == 1
+    assert "Good" in assets[0].path.name                            # kept the licensed good one
+
+
 def _run_all():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

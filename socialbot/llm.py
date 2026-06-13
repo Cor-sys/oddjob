@@ -156,8 +156,16 @@ def _extract_json(text: str) -> Any:
     raise ValueError(f"Model did not return valid JSON:\n{text[:500]}")
 
 
-def grounded(prompt: str, *, system: str | None = None) -> tuple[str, list[str]]:
-    """Run a search-grounded generation. Returns (text, source_urls)."""
+def grounded(prompt: str, *, system: str | None = None,
+             model: str | None = None) -> tuple[str, list[str]]:
+    """Run a search-grounded generation. Returns (text, source_urls).
+
+    `model` picks the primary model. Defaults to the cheap "calls" model
+    (Flash-Lite) so the high-volume grounded calls (fact-check) stay on the
+    roomier free-tier lane. Pass settings.gemini_model (Flash) for a heavy
+    grounded ask that Flash-Lite soft-fails too often — e.g. trend discovery,
+    which empty-STOPs and falls back to Flash anyway (see _GROUNDED_THINK_BUDGET);
+    routing it to Flash up front skips the wasted empty retries."""
     config = types.GenerateContentConfig(
         tools=[types.Tool(google_search=types.GoogleSearch())],
         system_instruction=system,
@@ -166,14 +174,14 @@ def grounded(prompt: str, *, system: str | None = None) -> tuple[str, list[str]]
         # _GROUNDED_THINK_BUDGET. Harmless on Flash (it thinks by default anyway).
         thinking_config=types.ThinkingConfig(thinking_budget=_GROUNDED_THINK_BUDGET),
     )
-    # grounded data calls (trends, fact-check) use the cheaper "calls" model
-    resp = _generate(prompt, config, model=settings.gemini_calls_model)
+    resp = _generate(prompt, config, model=model or settings.gemini_calls_model)
     return resp.text or "", _grounding_sources(resp)
 
 
-def grounded_json(prompt: str, *, system: str | None = None) -> tuple[Any, list[str]]:
+def grounded_json(prompt: str, *, system: str | None = None,
+                  model: str | None = None) -> tuple[Any, list[str]]:
     """Search-grounded generation that we coerce into JSON. Returns (obj, sources)."""
-    text, sources = grounded(prompt, system=system)
+    text, sources = grounded(prompt, system=system, model=model)
     return _extract_json(text), sources
 
 

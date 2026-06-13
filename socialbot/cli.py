@@ -245,13 +245,17 @@ def _cmd_auto(args) -> int:
 
 
 def _cmd_batch(args) -> int:
-    from . import tournament
+    from . import topic_history, tournament
     from .config import DATA_DIR
 
     pause_file = DATA_DIR / "PAUSED"
     if pause_file.exists() and not args.dry_run:
         print(f"batch is PAUSED — delete {pause_file} to resume.")
         return 0
+    # Reconcile coverage memory from the published/pending/reserve artifacts first,
+    # so a wiped or stale cache can't let the batch re-make a story already covered.
+    stats = topic_history.reconcile()
+    print(f"[coverage] reconciled {stats['scanned']} artifact(s); cache holds {stats['cache_size']}")
     tournament.run_batch(post=args.post, niche=args.niche, dry_run=args.dry_run,
                          schedule=not args.no_schedule)
     return 0

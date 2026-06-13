@@ -327,6 +327,13 @@ def synthesize() -> dict:
         "sample_size": agg["n"],
         "weights": weights,
         "directives": directives,
+        # Adaptive posting bar (judge-score units). 0 = no learned bar yet, so the
+        # batch uses settings.post_score_floor. Once enough videos carry both a
+        # judge score and real retention (we now persist the per-dimension judge
+        # subscores on each item), this can be raised to the score below which the
+        # channel's own videos reliably under-retain. Until that correlation exists
+        # we don't invent a number — the scales differ (retention % vs quality 0-100).
+        "post_floor": 0,
         "notes": notes,
     }
     try:
